@@ -91,3 +91,44 @@ func TestEvaluateLessThanTypeErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateLessThanOrEqual(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Bool
+	}{
+		{"1 <= 2", runtime.Bool(true)},
+		{"2 <= 2", runtime.Bool(true)},
+		{"2 <= 1", runtime.Bool(false)},
+		{"1.5 <= 2", runtime.Bool(true)},
+		{"1 + 2 <= 2 * 2", runtime.Bool(true)},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateLessThanOrEqualTypeErrors(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"1 <= true", "type error at 1:3: operator <= is not defined for Number and Bool"},
+		{"\n\"a\" <= 2", "type error at 2:5: operator <= is not defined for String and Number"},
+		{"null <= null", "type error at 1:6: operator <= is not defined for Null and Null"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(program)
+			if value != nil || err == nil || err.Error() != tt.want {
+				t.Fatalf("Evaluate(%q) = %v, %v; want %q", tt.input, value, err, tt.want)
+			}
+		})
+	}
+}
