@@ -122,6 +122,8 @@ func evaluateBinary(expression *ast.BinaryExpression, environment *Environment) 
 			return runtime.Bool(leftNumber <= rightNumber), nil
 		case token.Greater:
 			return runtime.Bool(leftNumber > rightNumber), nil
+		case token.GreaterEq:
+			return runtime.Bool(leftNumber >= rightNumber), nil
 		}
 	}
 	if expression.Operator.Type == token.Equal {
