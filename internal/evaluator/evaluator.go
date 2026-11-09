@@ -122,6 +122,8 @@ func evaluateBinary(expression *ast.BinaryExpression, environment *Environment) 
 			return runtime.Number(math.Mod(float64(leftNumber), float64(rightNumber))), nil
 		case token.Equal:
 			return runtime.Bool(leftNumber == rightNumber), nil
+		case token.NotEqual:
+			return runtime.Bool(leftNumber != rightNumber), nil
 		case token.Less:
 			return runtime.Bool(leftNumber < rightNumber), nil
 		case token.LessEqual:
@@ -134,6 +136,9 @@ func evaluateBinary(expression *ast.BinaryExpression, environment *Environment) 
 	}
 	if expression.Operator.Type == token.Equal {
 		return runtime.Bool(left.Type() == right.Type() && left.Inspect() == right.Inspect()), nil
+	}
+	if expression.Operator.Type == token.NotEqual {
+		return runtime.Bool(!(left.Type() == right.Type() && left.Inspect() == right.Inspect())), nil
 	}
 	return nil, fmt.Errorf("type error at %d:%d: operator %s is not defined for %s and %s", expression.Operator.Position.Line, expression.Operator.Position.Column, expression.Operator.Lexeme, left.Type(), right.Type())
 }

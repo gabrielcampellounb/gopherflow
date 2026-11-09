@@ -259,3 +259,50 @@ func TestEvaluateRemainderErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateNotEqual(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Bool
+	}{
+		{"1 != 1", runtime.Bool(false)},
+		{"1 != 2", runtime.Bool(true)},
+		{"1.5 != 1.5", runtime.Bool(false)},
+		{"true != true", runtime.Bool(false)},
+		{"true != false", runtime.Bool(true)},
+		{`"a" != "a"`, runtime.Bool(false)},
+		{`"a" != "b"`, runtime.Bool(true)},
+		{"1 != true", runtime.Bool(true)},
+		{`"1" != 1`, runtime.Bool(true)},
+		{"null != null", runtime.Bool(false)},
+		{"1 + 1 != 3", runtime.Bool(true)},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateNotEqualOperandErrors(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"\nmissing != 1", "name error at 2:1: undefined identifier \"missing\""},
+		{"1 != missing", "name error at 1:6: undefined identifier \"missing\""},
+		{"1 != (1 / 0)", "runtime error at 1:9: division by zero"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(program)
+			if value != nil || err == nil || err.Error() != tt.want {
+				t.Fatalf("Evaluate(%q) = %v, %v; want %q", tt.input, value, err, tt.want)
+			}
+		})
+	}
+}
