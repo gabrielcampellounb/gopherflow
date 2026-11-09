@@ -22,6 +22,7 @@ func TestEvaluateRegression(t *testing.T) {
 		{`(0 - 1) * 2 + 8 / 4`, runtime.Number(0)},
 		{`20 - 5 - 3`, runtime.Number(12)}, {`24 / 4 / 2`, runtime.Number(3)},
 		{`0.5 + 1.25`, runtime.Number(1.75)}, {`false`, runtime.Bool(false)},
+		{`5 % 2`, runtime.Number(1)},
 		{`1 == 1`, runtime.Bool(true)}, {`1 == 2`, runtime.Bool(false)},
 		{`1 < 2`, runtime.Bool(true)},
 		{`1 <= 2`, runtime.Bool(true)},
@@ -56,7 +57,7 @@ func TestEvaluationErrorsAndOrder(t *testing.T) {
 		{"false - 1", "operator - is not defined for Bool and Number"},
 		{`"a" * 2`, "operator * is not defined for String and Number"},
 		{"null / 0", "operator / is not defined for Null and Number"},
-		{"1 % 2", "operator % is not defined"}, {"1 != 2", "operator != is not defined"},
+		{"1 != 2", "operator != is not defined"},
 		{"true and false", "operator and is not defined"}, {"true or false", "operator or is not defined"},
 		{"1 |> 2", "operator |> is not defined"},
 	} {

@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/ast"
@@ -114,6 +115,11 @@ func evaluateBinary(expression *ast.BinaryExpression, environment *Environment) 
 				return nil, fmt.Errorf("runtime error at %d:%d: division by zero", expression.Operator.Position.Line, expression.Operator.Position.Column)
 			}
 			return leftNumber / rightNumber, nil
+		case token.Percent:
+			if rightNumber == 0 {
+				return nil, fmt.Errorf("runtime error at %d:%d: division by zero", expression.Operator.Position.Line, expression.Operator.Position.Column)
+			}
+			return runtime.Number(math.Mod(float64(leftNumber), float64(rightNumber))), nil
 		case token.Equal:
 			return runtime.Bool(leftNumber == rightNumber), nil
 		case token.Less:

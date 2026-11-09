@@ -214,3 +214,48 @@ func TestEvaluateGreaterThanOrEqualTypeErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateRemainder(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Number
+	}{
+		{"5 % 2", runtime.Number(1)},
+		{"5.5 % 2", runtime.Number(1.5)},
+		{"(0 - 5) % 2", runtime.Number(-1)},
+		{"5 % (0 - 2)", runtime.Number(1)},
+		{"(0 - 5) % (0 - 2)", runtime.Number(-1)},
+		{"4 % 2", runtime.Number(0)},
+		{"1 + 5 % 2", runtime.Number(2)},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateRemainderErrors(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"5 % 0", "runtime error at 1:3: division by zero"},
+		{"\n5 % (2 - 2)", "runtime error at 2:3: division by zero"},
+		{"1 % true", "type error at 1:3: operator % is not defined for Number and Bool"},
+		{"\n\"a\" % 2", "type error at 2:5: operator % is not defined for String and Number"},
+		{"null % null", "type error at 1:6: operator % is not defined for Null and Null"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(program)
+			if value != nil || err == nil || err.Error() != tt.want {
+				t.Fatalf("Evaluate(%q) = %v, %v; want %q", tt.input, value, err, tt.want)
+			}
+		})
+	}
+}
