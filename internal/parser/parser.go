@@ -53,6 +53,7 @@ func (p *Parser) Parse() (*ast.Program, error) {
 func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 	var left ast.Expression
 	var err error
+	needsAdvance := true
 	switch p.current.Type {
 	case token.Identifier:
 		left = &ast.Identifier{Name: p.current.Lexeme, Pos: p.current.Position}
@@ -63,6 +64,17 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 		left = &ast.Literal{Value: p.current.Lexeme, Kind: token.Number, Pos: p.current.Position}
 	case token.String, token.True, token.False, token.Null:
 		left = &ast.Literal{Value: p.current.Lexeme, Kind: p.current.Type, Pos: p.current.Position}
+	case token.Minus:
+		operator := p.current
+		if err = p.advance(); err != nil {
+			return nil, err
+		}
+		right, rightErr := p.parseExpression(unaryPrecedence)
+		if rightErr != nil {
+			return nil, rightErr
+		}
+		left = &ast.UnaryExpression{Operator: operator, Right: right}
+		needsAdvance = false
 	case token.LeftParen:
 		if err = p.advance(); err != nil {
 			return nil, err
@@ -72,7 +84,7 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 			err = p.errorf("expected ')'")
 		}
 	default:
-		if p.current.Type == token.Let {
+		if p.current.Type == token.Let && precedence < unaryPrecedence {
 			return p.parseLet()
 		}
 		return nil, p.errorf("expected expression, got %s", p.current.Type)
@@ -80,8 +92,10 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = p.advance(); err != nil {
-		return nil, err
+	if needsAdvance {
+		if err = p.advance(); err != nil {
+			return nil, err
+		}
 	}
 
 	for precedence < precedenceOf(p.current.Type) {
@@ -133,6 +147,8 @@ func (p *Parser) parseLet() (ast.Expression, error) {
 	}
 	return &ast.LetExpression{Name: name, Value: value, Body: body, Pos: position}, nil
 }
+
+const unaryPrecedence = 8
 
 func precedenceOf(kind token.TokenType) int {
 	switch kind {

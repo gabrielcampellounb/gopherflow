@@ -59,6 +59,15 @@ func (l *Literal) String() string {
 }
 func (l *Literal) Position() token.Position { return l.Pos }
 
+type UnaryExpression struct {
+	Operator token.Token
+	Right    Expression
+}
+
+func (u *UnaryExpression) expressionNode()          {}
+func (u *UnaryExpression) String() string           { return "(" + u.Operator.Lexeme + u.Right.String() + ")" }
+func (u *UnaryExpression) Position() token.Position { return u.Operator.Position }
+
 type BinaryExpression struct {
 	Left     Expression
 	Operator token.Token

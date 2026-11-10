@@ -63,6 +63,15 @@ func evaluateExpression(expression ast.Expression, environment *Environment) (ru
 		child := NewEnvironment(environment)
 		child.Set(node.Name.Name, value)
 		return evaluateExpression(node.Body, child)
+	case *ast.UnaryExpression:
+		right, err := evaluateExpression(node.Right, environment)
+		if err != nil {
+			return nil, err
+		}
+		if number, ok := right.(runtime.Number); ok && node.Operator.Type == token.Minus {
+			return -number, nil
+		}
+		return nil, fmt.Errorf("type error at %d:%d: operator %s is not defined for %s", node.Operator.Position.Line, node.Operator.Position.Column, node.Operator.Lexeme, right.Type())
 	case *ast.BinaryExpression:
 		return evaluateBinary(node, environment)
 	default:

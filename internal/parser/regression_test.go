@@ -72,6 +72,21 @@ func TestLetAST(t *testing.T) {
 	}
 }
 
+func TestUnaryMinusASTPosition(t *testing.T) {
+	program, err := Parse(lexer.New("\n -5"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := program.Expressions[0].(*ast.UnaryExpression)
+	if !ok || got.Operator.Type != token.Minus || got.Position() != (token.Position{Offset: 2, Line: 2, Column: 2}) {
+		t.Fatalf("unexpected unary expression: %#v", program.Expressions[0])
+	}
+	right, ok := got.Right.(*ast.Literal)
+	if !ok || right.Position() != (token.Position{Offset: 3, Line: 2, Column: 3}) {
+		t.Fatalf("unexpected unary operand: %#v", got.Right)
+	}
+}
+
 func TestSyntaxErrorDetails(t *testing.T) {
 	for _, tt := range []struct {
 		source, message      string
@@ -80,6 +95,8 @@ func TestSyntaxErrorDetails(t *testing.T) {
 		{"", "expected expression, got EOF", 0, 1, 1},
 		{" \n", "expected expression, got EOF", 2, 2, 1},
 		{"1 +", "expected expression, got EOF", 3, 1, 4},
+		{"-", "expected expression, got EOF", 1, 1, 2},
+		{"2 * -", "expected expression, got EOF", 5, 1, 6},
 		{"let = 1 in 2", "expected identifier after let", 4, 1, 5},
 		{"let x 1 in x", "expected '=' after identifier", 6, 1, 7},
 		{"let x = 1 x", "expected 'in' after let value", 10, 1, 11},
@@ -116,7 +133,7 @@ func TestLexicalErrorsPropagate(t *testing.T) {
 }
 
 func TestInvalidAndUnimplementedSyntax(t *testing.T) {
-	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "fn(x) => x", "if true then 1 else 2", "def f() = 1; f()", "x(1)", "x.y", "x[0]", "-1", "not true", "1; 2", strings.Repeat("9", 400)} {
+	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "fn(x) => x", "if true then 1 else 2", "def f() = 1; f()", "x(1)", "x.y", "x[0]", "-let x = 1 in x", "not true", "1; 2", strings.Repeat("9", 400)} {
 		p, err := Parse(lexer.New(source))
 		if err == nil || p != nil {
 			t.Errorf("accepted %q: %v", source, p)
@@ -125,7 +142,7 @@ func TestInvalidAndUnimplementedSyntax(t *testing.T) {
 }
 
 func TestProgramStringRoundTrip(t *testing.T) {
-	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1"} {
+	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1", "-5", "--5", "-(3 + 2)", "2 * -3"} {
 		p, err := Parse(lexer.New(source))
 		if err != nil {
 			t.Fatal(err)

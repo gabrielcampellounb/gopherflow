@@ -306,3 +306,52 @@ func TestEvaluateNotEqualOperandErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateUnaryMinus(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Number
+	}{
+		{"-5", runtime.Number(-5)},
+		{"--5", runtime.Number(5)},
+		{"-(0 - 5)", runtime.Number(5)},
+		{"-0", runtime.Number(0)},
+		{"-1.5", runtime.Number(-1.5)},
+		{"-(3 + 2)", runtime.Number(-5)},
+		{"2 * -3", runtime.Number(-6)},
+		{"-2 * 3", runtime.Number(-6)},
+		{"5 - -2", runtime.Number(7)},
+		{"-5 % 2", runtime.Number(-1)},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateUnaryMinusErrors(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"-true", "type error at 1:1: operator - is not defined for Bool"},
+		{"\n -\"a\"", "type error at 2:2: operator - is not defined for String"},
+		{"-null", "type error at 1:1: operator - is not defined for Null"},
+		{"--true", "type error at 1:2: operator - is not defined for Bool"},
+		{"-missing", "name error at 1:2: undefined identifier \"missing\""},
+		{"-(1 / 0)", "runtime error at 1:5: division by zero"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(program)
+			if value != nil || err == nil || err.Error() != tt.want {
+				t.Fatalf("Evaluate(%q) = %v, %v; want %q", tt.input, value, err, tt.want)
+			}
+		})
+	}
+}
