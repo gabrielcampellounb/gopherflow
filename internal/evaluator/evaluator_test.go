@@ -355,3 +355,50 @@ func TestEvaluateUnaryMinusErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateNot(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Bool
+	}{
+		{"not true", runtime.Bool(false)},
+		{"not false", runtime.Bool(true)},
+		{"not not true", runtime.Bool(true)},
+		{"not (1 < 2)", runtime.Bool(false)},
+		{"not (2 < 1)", runtime.Bool(true)},
+		{"not true == false", runtime.Bool(true)},
+		{"not false == false", runtime.Bool(false)},
+		{"not (2 * -3 < -5)", runtime.Bool(false)},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateNotErrors(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"not 1", "type error at 1:1: operator not is not defined for Number"},
+		{"\n not \"a\"", "type error at 2:2: operator not is not defined for String"},
+		{"not null", "type error at 1:1: operator not is not defined for Null"},
+		{"not not 1", "type error at 1:5: operator not is not defined for Number"},
+		{"not missing", "name error at 1:5: undefined identifier \"missing\""},
+		{"not (1 / 0)", "runtime error at 1:8: division by zero"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(program)
+			if value != nil || err == nil || err.Error() != tt.want {
+				t.Fatalf("Evaluate(%q) = %v, %v; want %q", tt.input, value, err, tt.want)
+			}
+		})
+	}
+}

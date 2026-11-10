@@ -133,7 +133,7 @@ func TestLexicalErrorsPropagate(t *testing.T) {
 }
 
 func TestInvalidAndUnimplementedSyntax(t *testing.T) {
-	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "fn(x) => x", "if true then 1 else 2", "def f() = 1; f()", "x(1)", "x.y", "x[0]", "-let x = 1 in x", "not true", "1; 2", strings.Repeat("9", 400)} {
+	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "fn(x) => x", "if true then 1 else 2", "def f() = 1; f()", "x(1)", "x.y", "x[0]", "-let x = 1 in x", "1; 2", strings.Repeat("9", 400)} {
 		p, err := Parse(lexer.New(source))
 		if err == nil || p != nil {
 			t.Errorf("accepted %q: %v", source, p)
@@ -142,7 +142,7 @@ func TestInvalidAndUnimplementedSyntax(t *testing.T) {
 }
 
 func TestProgramStringRoundTrip(t *testing.T) {
-	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1", "-5", "--5", "-(3 + 2)", "2 * -3"} {
+	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1", "-5", "--5", "-(3 + 2)", "2 * -3", "not true", "not not false", "not (1 < 2)"} {
 		p, err := Parse(lexer.New(source))
 		if err != nil {
 			t.Fatal(err)

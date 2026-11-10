@@ -64,8 +64,13 @@ type UnaryExpression struct {
 	Right    Expression
 }
 
-func (u *UnaryExpression) expressionNode()          {}
-func (u *UnaryExpression) String() string           { return "(" + u.Operator.Lexeme + u.Right.String() + ")" }
+func (u *UnaryExpression) expressionNode() {}
+func (u *UnaryExpression) String() string {
+	if u.Operator.Type == token.Not {
+		return "(" + u.Operator.Lexeme + " " + u.Right.String() + ")"
+	}
+	return "(" + u.Operator.Lexeme + u.Right.String() + ")"
+}
 func (u *UnaryExpression) Position() token.Position { return u.Operator.Position }
 
 type BinaryExpression struct {

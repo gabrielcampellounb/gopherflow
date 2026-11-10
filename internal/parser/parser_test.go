@@ -70,3 +70,28 @@ func TestParserUnaryMinusPrecedence(t *testing.T) {
 		})
 	}
 }
+
+func TestParserNotPrecedence(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"not true", "(not true)"},
+		{"not not true", "(not (not true))"},
+		{"not (1 < 2)", "(not (1 < 2))"},
+		{"not true == false", "((not true) == false)"},
+		{"not false == true", "((not false) == true)"},
+		{"-not true", "(-(not true))"},
+		{"not -1", "(not (-1))"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := program.String(); got != tt.want {
+				t.Errorf("Parse(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

@@ -71,6 +71,9 @@ func evaluateExpression(expression ast.Expression, environment *Environment) (ru
 		if number, ok := right.(runtime.Number); ok && node.Operator.Type == token.Minus {
 			return -number, nil
 		}
+		if boolean, ok := right.(runtime.Bool); ok && node.Operator.Type == token.Not {
+			return !boolean, nil
+		}
 		return nil, fmt.Errorf("type error at %d:%d: operator %s is not defined for %s", node.Operator.Position.Line, node.Operator.Position.Column, node.Operator.Lexeme, right.Type())
 	case *ast.BinaryExpression:
 		return evaluateBinary(node, environment)

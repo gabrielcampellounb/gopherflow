@@ -64,7 +64,7 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 		left = &ast.Literal{Value: p.current.Lexeme, Kind: token.Number, Pos: p.current.Position}
 	case token.String, token.True, token.False, token.Null:
 		left = &ast.Literal{Value: p.current.Lexeme, Kind: p.current.Type, Pos: p.current.Position}
-	case token.Minus:
+	case token.Minus, token.Not:
 		operator := p.current
 		if err = p.advance(); err != nil {
 			return nil, err
