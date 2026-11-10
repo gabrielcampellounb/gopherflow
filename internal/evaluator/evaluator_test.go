@@ -402,3 +402,79 @@ func TestEvaluateNotErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateLogicalOperators(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Bool
+	}{
+		{"true and true", runtime.Bool(true)},
+		{"true and false", runtime.Bool(false)},
+		{"false and true", runtime.Bool(false)},
+		{"false and false", runtime.Bool(false)},
+		{"true or true", runtime.Bool(true)},
+		{"true or false", runtime.Bool(true)},
+		{"false or true", runtime.Bool(true)},
+		{"false or false", runtime.Bool(false)},
+		{"true or false and false", runtime.Bool(true)},
+		{"(true or false) and false", runtime.Bool(false)},
+		{"not false and false", runtime.Bool(false)},
+		{"false or not false and true", runtime.Bool(true)},
+		{"1 < 2 and 3 > 2 or false", runtime.Bool(true)},
+		{"1 > 2 or 3 < 2 and true", runtime.Bool(false)},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateLogicalShortCircuit(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Bool
+	}{
+		{"false and missing", runtime.Bool(false)},
+		{"true or missing", runtime.Bool(true)},
+		{"false and (1 / 0 == 0)", runtime.Bool(false)},
+		{"true or (1 / 0 == 0)", runtime.Bool(true)},
+		{"false and missing or true", runtime.Bool(true)},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateLogicalErrors(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"true and missing", "name error at 1:10: undefined identifier \"missing\""},
+		{"false or missing", "name error at 1:10: undefined identifier \"missing\""},
+		{"true and (1 / 0 == 0)", "runtime error at 1:13: division by zero"},
+		{"false or (1 / 0 == 0)", "runtime error at 1:13: division by zero"},
+		{"1 and true", "type error at 1:3: operator and is not defined for Number and Bool"},
+		{"true and 1", "type error at 1:6: operator and is not defined for Bool and Number"},
+		{"null or false", "type error at 1:6: operator or is not defined for Null and Bool"},
+		{"false or \"x\"", "type error at 1:7: operator or is not defined for Bool and String"},
+		{"\n true and null", "type error at 2:7: operator and is not defined for Bool and Null"},
+		{"\n false or 2", "type error at 2:8: operator or is not defined for Bool and Number"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(program)
+			if value != nil || err == nil || err.Error() != tt.want {
+				t.Fatalf("Evaluate(%q) = %v, %v; want %q", tt.input, value, err, tt.want)
+			}
+		})
+	}
+}

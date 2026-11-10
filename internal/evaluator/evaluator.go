@@ -108,9 +108,27 @@ func evaluateBinary(expression *ast.BinaryExpression, environment *Environment) 
 	if err != nil {
 		return nil, err
 	}
+	leftBool, leftIsBool := left.(runtime.Bool)
+	if leftIsBool {
+		switch expression.Operator.Type {
+		case token.And:
+			if !leftBool {
+				return leftBool, nil
+			}
+		case token.Or:
+			if leftBool {
+				return leftBool, nil
+			}
+		}
+	}
 	right, err := evaluateExpression(expression.Right, environment)
 	if err != nil {
 		return nil, err
+	}
+	if leftIsBool && (expression.Operator.Type == token.And || expression.Operator.Type == token.Or) {
+		if rightBool, ok := right.(runtime.Bool); ok {
+			return rightBool, nil
+		}
 	}
 	leftNumber, leftOK := left.(runtime.Number)
 	rightNumber, rightOK := right.(runtime.Number)

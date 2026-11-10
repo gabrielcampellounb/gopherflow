@@ -95,3 +95,26 @@ func TestParserNotPrecedence(t *testing.T) {
 		})
 	}
 }
+
+func TestParserLogicalPrecedence(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"true or false and false", "(true or (false and false))"},
+		{"not false and true", "((not false) and true)"},
+		{"1 < 2 and 3 > 2 or false", "(((1 < 2) and (3 > 2)) or false)"},
+		{"true and false and true", "((true and false) and true)"},
+		{"false or true or false", "((false or true) or false)"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := program.String(); got != tt.want {
+				t.Errorf("Parse(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
