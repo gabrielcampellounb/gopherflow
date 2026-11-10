@@ -13,6 +13,7 @@ func TestNodeRenderingAndPosition(t *testing.T) {
 	not := &UnaryExpression{Operator: token.Token{Lexeme: "not", Type: token.Not, Position: pos}, Right: &Literal{Value: "true", Kind: token.True, Pos: pos}}
 	b := &BinaryExpression{Left: x, Right: n, Operator: token.Token{Lexeme: "+", Type: token.Plus, Position: pos}}
 	l := &LetExpression{Name: x, Value: n, Body: b, Pos: pos}
+	i := &IfExpression{Condition: &Literal{Value: "true", Kind: token.True, Pos: pos}, Consequence: n, Alternative: x, Pos: pos}
 	for _, tt := range []struct {
 		node     Node
 		text     string
@@ -23,6 +24,9 @@ func TestNodeRenderingAndPosition(t *testing.T) {
 		{u, "(-2)", pos},
 		{not, "(not true)", pos},
 		{b, "(x + 2)", pos}, {l, "let x = 2 in (x + 2)", pos},
+		{i, "if true then 2 else x", pos},
+		{&BinaryExpression{Left: i, Right: n, Operator: token.Token{Lexeme: "+", Position: pos}}, "((if true then 2 else x) + 2)", pos},
+		{&UnaryExpression{Operator: token.Token{Lexeme: "-", Type: token.Minus, Position: pos}, Right: i}, "(-(if true then 2 else x))", pos},
 		{&Program{}, "", token.Position{}}, {&Program{Expressions: []Expression{x, n}}, "x; 2", pos},
 		{&BinaryExpression{Left: l, Right: l, Operator: token.Token{Lexeme: "+", Position: pos}}, "((let x = 2 in (x + 2)) + (let x = 2 in (x + 2)))", pos},
 	} {

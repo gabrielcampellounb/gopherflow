@@ -66,10 +66,14 @@ type UnaryExpression struct {
 
 func (u *UnaryExpression) expressionNode() {}
 func (u *UnaryExpression) String() string {
-	if u.Operator.Type == token.Not {
-		return "(" + u.Operator.Lexeme + " " + u.Right.String() + ")"
+	right := u.Right.String()
+	if _, ok := u.Right.(*IfExpression); ok {
+		right = "(" + right + ")"
 	}
-	return "(" + u.Operator.Lexeme + u.Right.String() + ")"
+	if u.Operator.Type == token.Not {
+		return "(" + u.Operator.Lexeme + " " + right + ")"
+	}
+	return "(" + u.Operator.Lexeme + right + ")"
 }
 func (u *UnaryExpression) Position() token.Position { return u.Operator.Position }
 
@@ -84,10 +88,12 @@ func (b *BinaryExpression) String() string {
 	return "(" + operandString(b.Left) + " " + b.Operator.Lexeme + " " + operandString(b.Right) + ")"
 }
 
-// A let body extends to the end of its expression. Preserve explicit grouping
-// when rendering it as a binary operand so parsing the result keeps its scope.
+// Preserve grouping of let and if expressions used as binary operands.
 func operandString(expression Expression) string {
 	if _, ok := expression.(*LetExpression); ok {
+		return "(" + expression.String() + ")"
+	}
+	if _, ok := expression.(*IfExpression); ok {
 		return "(" + expression.String() + ")"
 	}
 	return expression.String()
@@ -107,6 +113,19 @@ func (l *LetExpression) String() string {
 	return "let " + l.Name.String() + " = " + l.Value.String() + " in " + l.Body.String()
 }
 func (l *LetExpression) Position() token.Position { return l.Pos }
+
+type IfExpression struct {
+	Condition   Expression
+	Consequence Expression
+	Alternative Expression
+	Pos         token.Position
+}
+
+func (i *IfExpression) expressionNode() {}
+func (i *IfExpression) String() string {
+	return "if " + i.Condition.String() + " then " + i.Consequence.String() + " else " + i.Alternative.String()
+}
+func (i *IfExpression) Position() token.Position { return i.Pos }
 
 // quoteString uses only escapes accepted by the lexer, preserving other bytes.
 // Go's strconv.Quote also emits escapes such as \xNN that GopherFlow does not support.

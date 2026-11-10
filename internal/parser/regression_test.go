@@ -87,6 +87,17 @@ func TestUnaryMinusASTPosition(t *testing.T) {
 	}
 }
 
+func TestIfASTPosition(t *testing.T) {
+	program, err := Parse(lexer.New("\n if true then 1 else 2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := program.Expressions[0].(*ast.IfExpression)
+	if !ok || got.Position() != (token.Position{Offset: 2, Line: 2, Column: 2}) {
+		t.Fatalf("unexpected if expression: %#v", program.Expressions[0])
+	}
+}
+
 func TestSyntaxErrorDetails(t *testing.T) {
 	for _, tt := range []struct {
 		source, message      string
@@ -133,7 +144,7 @@ func TestLexicalErrorsPropagate(t *testing.T) {
 }
 
 func TestInvalidAndUnimplementedSyntax(t *testing.T) {
-	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "fn(x) => x", "if true then 1 else 2", "def f() = 1; f()", "x(1)", "x.y", "x[0]", "-let x = 1 in x", "1; 2", strings.Repeat("9", 400)} {
+	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "fn(x) => x", "def f() = 1; f()", "x(1)", "x.y", "x[0]", "-let x = 1 in x", "1; 2", strings.Repeat("9", 400)} {
 		p, err := Parse(lexer.New(source))
 		if err == nil || p != nil {
 			t.Errorf("accepted %q: %v", source, p)
@@ -142,7 +153,7 @@ func TestInvalidAndUnimplementedSyntax(t *testing.T) {
 }
 
 func TestProgramStringRoundTrip(t *testing.T) {
-	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1", "-5", "--5", "-(3 + 2)", "2 * -3", "not true", "not not false", "not (1 < 2)"} {
+	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1", "-5", "--5", "-(3 + 2)", "2 * -3", "not true", "not not false", "not (1 < 2)", "if true then 1 else 2", "if false then if true then 1 else 2 else 3", "(if true then 1 else 2) + 3", "not (if false then true else false)", "-(if true then 1 else 2)"} {
 		p, err := Parse(lexer.New(source))
 		if err != nil {
 			t.Fatal(err)

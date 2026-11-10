@@ -26,6 +26,7 @@ func TestEvaluateRegression(t *testing.T) {
 		{`1 == 1`, runtime.Bool(true)}, {`1 == 2`, runtime.Bool(false)},
 		{`1 != 2`, runtime.Bool(true)},
 		{`true and false`, runtime.Bool(false)}, {`false or true`, runtime.Bool(true)},
+		{`if true then 1 else 2`, runtime.Number(1)},
 		{`1 < 2`, runtime.Bool(true)},
 		{`1 <= 2`, runtime.Bool(true)},
 		{`2 > 1`, runtime.Bool(true)},

@@ -63,6 +63,19 @@ func evaluateExpression(expression ast.Expression, environment *Environment) (ru
 		child := NewEnvironment(environment)
 		child.Set(node.Name.Name, value)
 		return evaluateExpression(node.Body, child)
+	case *ast.IfExpression:
+		condition, err := evaluateExpression(node.Condition, environment)
+		if err != nil {
+			return nil, err
+		}
+		boolean, ok := condition.(runtime.Bool)
+		if !ok {
+			return nil, fmt.Errorf("type error at %d:%d: if condition must be Bool, got %s", node.Pos.Line, node.Pos.Column, condition.Type())
+		}
+		if boolean {
+			return evaluateExpression(node.Consequence, environment)
+		}
+		return evaluateExpression(node.Alternative, environment)
 	case *ast.UnaryExpression:
 		right, err := evaluateExpression(node.Right, environment)
 		if err != nil {

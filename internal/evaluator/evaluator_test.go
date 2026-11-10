@@ -478,3 +478,76 @@ func TestEvaluateLogicalErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluateIfExpression(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Value
+	}{
+		{"if true then 10 else 20", runtime.Number(10)},
+		{"if false then 10 else 20", runtime.Number(20)},
+		{"if 5 > 3 then 100 else 200", runtime.Number(100)},
+		{"if 5 < 3 then 100 else 200", runtime.Number(200)},
+		{"if true and not false then 1 else 2", runtime.Number(1)},
+		{"if false or not false then 1 else 2", runtime.Number(1)},
+		{"if true then if false then 1 else 2 else 3", runtime.Number(2)},
+		{"if false then 1 else if true then 2 else 3", runtime.Number(2)},
+		{"(if true then 3 else 4) * 2", runtime.Number(6)},
+		{"2 + (if false then 3 else 4)", runtime.Number(6)},
+		{"let x = 7 in if x > 3 then x else 0", runtime.Number(7)},
+		{"if true then \"yes\" else 0", runtime.String("yes")},
+		{"if false then 1 else true", runtime.Bool(true)},
+		{"if true then null else false", runtime.Null{}},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateIfSkipsUnselectedBranch(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  runtime.Value
+	}{
+		{"if true then 1 else missing", runtime.Number(1)},
+		{"if false then missing else 2", runtime.Number(2)},
+		{"if true then \"ok\" else 1 / 0", runtime.String("ok")},
+		{"if false then 1 / 0 else null", runtime.Null{}},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := evaluate(t, tt.input); got != tt.want {
+				t.Errorf("Evaluate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEvaluateIfErrors(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  string
+	}{
+		{"if 1 then 10 else 20", "type error at 1:1: if condition must be Bool, got Number"},
+		{"\n if \"x\" then 1 else 2", "type error at 2:2: if condition must be Bool, got String"},
+		{"if null then 1 else 2", "type error at 1:1: if condition must be Bool, got Null"},
+		{"if missing then 1 else 2", "name error at 1:4: undefined identifier \"missing\""},
+		{"if 1 / 0 then 1 else 2", "runtime error at 1:6: division by zero"},
+		{"if true then missing else 0", "name error at 1:14: undefined identifier \"missing\""},
+		{"if false then 0 else missing", "name error at 1:22: undefined identifier \"missing\""},
+		{"if true then 1 / 0 else 10", "runtime error at 1:16: division by zero"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.input))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(program)
+			if value != nil || err == nil || err.Error() != tt.want {
+				t.Fatalf("Evaluate(%q) = %v, %v; want %q", tt.input, value, err, tt.want)
+			}
+		})
+	}
+}

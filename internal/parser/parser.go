@@ -84,6 +84,9 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 			err = p.errorf("expected ')'")
 		}
 	default:
+		if p.current.Type == token.If && precedence == 0 {
+			return p.parseIf()
+		}
 		if p.current.Type == token.Let && precedence < unaryPrecedence {
 			return p.parseLet()
 		}
@@ -146,6 +149,38 @@ func (p *Parser) parseLet() (ast.Expression, error) {
 		return nil, err
 	}
 	return &ast.LetExpression{Name: name, Value: value, Body: body, Pos: position}, nil
+}
+
+func (p *Parser) parseIf() (ast.Expression, error) {
+	position := p.current.Position
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	condition, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
+	if p.current.Type != token.Then {
+		return nil, p.errorf("expected 'then' after if condition")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	consequence, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
+	if p.current.Type != token.Else {
+		return nil, p.errorf("expected 'else' after then branch")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	alternative, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.IfExpression{Condition: condition, Consequence: consequence, Alternative: alternative, Pos: position}, nil
 }
 
 const unaryPrecedence = 8
