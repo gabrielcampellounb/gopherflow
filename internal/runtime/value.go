@@ -79,7 +79,16 @@ type Function struct {
 }
 
 func (Function) Type() Type      { return FunctionType }
-func (Function) Inspect() string { return "<function>" }
+func (f Function) Inspect() string {
+	params := strings.Join(f.Parameters, ", ")
+
+	body, ok := f.Body.(interface{ String() string })
+	if !ok {
+		return fmt.Sprintf("fn(%s) => %v", params, f.Body)
+	}
+
+	return fmt.Sprintf("fn(%s) => %s", params, body.String())
+}
 
 type Builtin struct {
 	Name string

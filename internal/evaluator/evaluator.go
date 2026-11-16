@@ -64,6 +64,9 @@ func evaluateExpression(expression ast.Expression, environment *Environment) (ru
 		return evaluateExpression(node.Body, child)
 	case *ast.BinaryExpression:
 		return evaluateBinary(node, environment)
+	//case *ast.FunctionLiteral:
+	//	params := node.Parameters
+	//	body := node.Body
 	default:
 		return nil, fmt.Errorf("unsupported expression %T", expression)
 	}

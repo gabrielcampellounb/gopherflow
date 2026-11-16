@@ -20,7 +20,7 @@ func TestAllValueRepresentations(t *testing.T) {
 		{"nil list", List(nil), ListType, "[]"}, {"empty list", List{}, ListType, "[]"},
 		{"nil record", Record(nil), RecordType, "{}"}, {"empty record", Record{}, RecordType, "{}"},
 		{"nested", List{Record{"z": List{Null{}, Bool(true)}, "a": Number(1)}}, ListType, "[{a: 1, z: [null, true]}]"},
-		{"function", Function{}, FunctionType, "<function>"},
+		{"function", Function{}, FunctionType, "fn() => <nil>"},
 		{"builtin", Builtin{Name: "map"}, BuiltinType, "<builtin map>"},
 		{"empty stream", Stream{}, StreamType, "<stream len=0>"},
 		{"stream", Stream{Values: []Value{Number(1), Null{}}}, StreamType, "<stream len=2>"},
