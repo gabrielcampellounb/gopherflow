@@ -70,7 +70,7 @@ func TestEvaluateErrors(t *testing.T) {
 	}
 
 	expectedBody := "(x + 2)"
-	
+
 	if fn.Body.String() != expectedBody {
 		t.Fatalf("body is not %q. got=%q", expectedBody, fn.Body.String())
 	}

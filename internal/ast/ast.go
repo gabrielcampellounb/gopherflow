@@ -21,6 +21,27 @@ type Program struct {
 	Expressions []Expression
 }
 
+func (p *Program) String() string {
+	parts := make([]string, 0, len(p.Definitions)+len(p.Expressions))
+	for _, definition := range p.Definitions {
+		parts = append(parts, definition.String())
+	}
+	for _, expression := range p.Expressions {
+		parts = append(parts, expression.String())
+	}
+	return strings.Join(parts, "; ")
+}
+
+func (p *Program) Position() token.Position {
+	if len(p.Definitions) > 0 {
+		return p.Definitions[0].Position()
+	}
+	if len(p.Expressions) == 0 {
+		return token.Position{}
+	}
+	return p.Expressions[0].Position()
+}
+
 type Definition struct {
 	Name       *Identifier
 	Parameters []*Identifier
@@ -53,9 +74,9 @@ func (c *CallExpression) String() string {
 func (c *CallExpression) Position() token.Position { return c.Pos }
 
 type FunctionLiteral struct {
-	Token token.Token
+	Token      token.Token
 	Parameters []*Identifier
-	Body Expression
+	Body       Expression
 }
 
 func (f *FunctionLiteral) expressionNode() {}
@@ -65,28 +86,7 @@ func (f *FunctionLiteral) String() string {
 }
 
 func (f *FunctionLiteral) Position() token.Position {
-    return f.Token.Position
-}
-
-func (p *Program) String() string {
-	parts := make([]string, 0, len(p.Definitions)+len(p.Expressions))
-	for _, definition := range p.Definitions {
-		parts = append(parts, definition.String())
-	}
-	for _, expression := range p.Expressions {
-		parts = append(parts, expression.String())
-	}
-	return strings.Join(parts, "; ")
-}
-
-func (p *Program) Position() token.Position {
-	if len(p.Definitions) > 0 {
-		return p.Definitions[0].Position()
-	}
-	if len(p.Expressions) == 0 {
-		return token.Position{}
-	}
-	return p.Expressions[0].Position()
+	return f.Token.Position
 }
 
 type Identifier struct {

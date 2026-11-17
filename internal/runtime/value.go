@@ -78,7 +78,7 @@ type Function struct {
 	Body       any
 }
 
-func (Function) Type() Type      { return FunctionType }
+func (Function) Type() Type { return FunctionType }
 func (f Function) Inspect() string {
 	params := strings.Join(f.Parameters, ", ")
 

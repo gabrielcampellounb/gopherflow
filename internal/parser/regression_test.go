@@ -116,7 +116,7 @@ func TestLexicalErrorsPropagate(t *testing.T) {
 }
 
 func TestInvalidAndUnimplementedSyntax(t *testing.T) {
-	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "fn(x) => x", "if true then 1 else 2", "def f() = 1; f()", "x(1)", "x.y", "x[0]", "-1", "not true", "1; 2", strings.Repeat("9", 400)} {
+	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "if true then 1 else 2", "x.y", "x[0]", "-1", "not true", "1; 2", strings.Repeat("9", 400)} {
 		p, err := Parse(lexer.New(source))
 		if err == nil || p != nil {
 			t.Errorf("accepted %q: %v", source, p)
@@ -182,5 +182,343 @@ func TestStringRenderingPreservesEveryByte(t *testing.T) {
 	got, ok := p.Expressions[0].(*ast.Literal)
 	if !ok || got.Kind != token.String || got.Value != literal.Value {
 		t.Fatal("string rendering changed bytes")
+	}
+}
+
+func TestFunctionAST(t *testing.T) {
+	at := func(offset int) token.Position {
+		return token.Position{Offset: offset, Line: 1, Column: offset + 1}
+	}
+	ident := func(name string, offset int) *ast.Identifier {
+		return &ast.Identifier{Name: name, Pos: at(offset)}
+	}
+	fnToken := func(offset int) token.Token {
+		return token.Token{Type: token.Fn, Lexeme: "fn", Position: at(offset)}
+	}
+	plus := func(offset int) token.Token {
+		return token.Token{Type: token.Plus, Lexeme: "+", Position: at(offset)}
+	}
+
+	for _, tt := range []struct {
+		source string
+		want   ast.Expression
+	}{
+		{
+			// fn(x) => x + 1
+			"fn(x) => x + 1",
+			&ast.FunctionLiteral{
+				Token:      fnToken(0),
+				Parameters: []*ast.Identifier{ident("x", 3)},
+				Body: &ast.BinaryExpression{
+					Left:     ident("x", 9),
+					Operator: plus(11),
+					Right:    &ast.Literal{Value: "1", Kind: token.Number, Pos: at(13)},
+				},
+			},
+		},
+		{
+			// fn() => 1
+			"fn() => 1",
+			&ast.FunctionLiteral{
+				Token: fnToken(0),
+				Body:  &ast.Literal{Value: "1", Kind: token.Number, Pos: at(8)},
+			},
+		},
+		{
+			// fn(a, b) => a
+			"fn(a, b) => a",
+			&ast.FunctionLiteral{
+				Token:      fnToken(0),
+				Parameters: []*ast.Identifier{ident("a", 3), ident("b", 6)},
+				Body:       ident("a", 12),
+			},
+		},
+		{
+			// fn(x) => fn(y) => x + y
+			"fn(x) => fn(y) => x + y",
+			&ast.FunctionLiteral{
+				Token:      fnToken(0),
+				Parameters: []*ast.Identifier{ident("x", 3)},
+				Body: &ast.FunctionLiteral{
+					Token:      fnToken(9),
+					Parameters: []*ast.Identifier{ident("y", 12)},
+					Body: &ast.BinaryExpression{
+						Left:     ident("x", 18),
+						Operator: plus(20),
+						Right:    ident("y", 22),
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			got, err := Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := &ast.Program{Expressions: []ast.Expression{tt.want}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("unexpected AST:\n got: %s\nwant: %s", got, want)
+			}
+		})
+	}
+}
+
+func TestFunctionCallAST(t *testing.T) {
+	at := func(offset int) token.Position {
+		return token.Position{Offset: offset, Line: 1, Column: offset + 1}
+	}
+	ident := func(name string, offset int) *ast.Identifier {
+		return &ast.Identifier{Name: name, Pos: at(offset)}
+	}
+	number := func(value string, offset int) *ast.Literal {
+		return &ast.Literal{Value: value, Kind: token.Number, Pos: at(offset)}
+	}
+
+	for _, tt := range []struct {
+		source string
+		want   ast.Expression
+	}{
+		{
+			"f()",
+			&ast.CallExpression{
+				Function: ident("f", 0),
+				Pos:      at(1),
+			},
+		},
+		{
+			"f(1, x)",
+			&ast.CallExpression{
+				Function:  ident("f", 0),
+				Arguments: []ast.Expression{number("1", 2), ident("x", 5)},
+				Pos:       at(1),
+			},
+		},
+		{
+			"f(1)(2)",
+			&ast.CallExpression{
+				Function: &ast.CallExpression{
+					Function:  ident("f", 0),
+					Arguments: []ast.Expression{number("1", 2)},
+					Pos:       at(1),
+				},
+				Arguments: []ast.Expression{number("2", 5)},
+				Pos:       at(4),
+			},
+		},
+		{
+			"1 + f(2)",
+			&ast.BinaryExpression{
+				Left:     number("1", 0),
+				Operator: token.Token{Type: token.Plus, Lexeme: "+", Position: at(2)},
+				Right: &ast.CallExpression{
+					Function:  ident("f", 4),
+					Arguments: []ast.Expression{number("2", 6)},
+					Pos:       at(5),
+				},
+			},
+		},
+		{
+			"(fn() => 1)()",
+			&ast.CallExpression{
+				Function: &ast.FunctionLiteral{
+					Token: token.Token{Type: token.Fn, Lexeme: "fn", Position: at(1)},
+					Body:  number("1", 9),
+				},
+				Pos: at(11),
+			},
+		},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			got, err := Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := &ast.Program{Expressions: []ast.Expression{tt.want}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("unexpected AST:\n got: %s\nwant: %s", got, want)
+			}
+		})
+	}
+}
+
+func TestDefinitionAST(t *testing.T) {
+	at := func(offset int) token.Position {
+		return token.Position{Offset: offset, Line: 1, Column: offset + 1}
+	}
+	ident := func(name string, offset int) *ast.Identifier {
+		return &ast.Identifier{Name: name, Pos: at(offset)}
+	}
+	number := func(value string, offset int) *ast.Literal {
+		return &ast.Literal{Value: value, Kind: token.Number, Pos: at(offset)}
+	}
+	plus := func(offset int) token.Token {
+		return token.Token{Type: token.Plus, Lexeme: "+", Position: at(offset)}
+	}
+
+	for _, tt := range []struct {
+		source string
+		want   ast.Program
+	}{
+		{
+			"def f(x) = x + 1; f(2)",
+			ast.Program{
+				Definitions: []*ast.Definition{
+					{
+						Name:       ident("f", 4),
+						Parameters: []*ast.Identifier{ident("x", 6)},
+						Body: &ast.BinaryExpression{
+							Left:     ident("x", 11),
+							Operator: plus(13),
+							Right:    number("1", 15),
+						},
+						Pos: at(0),
+					},
+				},
+				Expressions: []ast.Expression{
+					&ast.CallExpression{
+						Function:  ident("f", 18),
+						Arguments: []ast.Expression{number("2", 20)},
+						Pos:       at(19),
+					},
+				},
+			},
+		},
+		{
+			"def f() = 1; f()",
+			ast.Program{
+				Definitions: []*ast.Definition{
+					{
+						Name: ident("f", 4),
+						Body: number("1", 10),
+						Pos:  at(0),
+					},
+				},
+				Expressions: []ast.Expression{
+					&ast.CallExpression{
+						Function: ident("f", 13),
+						Pos:      at(14),
+					},
+				},
+			},
+		},
+		{
+			"def f() = 1; def g() = f(); g();",
+			ast.Program{
+				Definitions: []*ast.Definition{
+					{
+						Name: ident("f", 4),
+						Body: number("1", 10),
+						Pos:  at(0),
+					},
+					{
+						Name: ident("g", 17),
+						Body: &ast.CallExpression{
+							Function: ident("f", 23),
+							Pos:      at(24),
+						},
+						Pos: at(13),
+					},
+				},
+				Expressions: []ast.Expression{
+					&ast.CallExpression{
+						Function: ident("g", 28),
+						Pos:      at(29),
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			got, err := Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := &tt.want
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("unexpected AST:\n got: %s\nwant: %s", got, want)
+			}
+		})
+	}
+}
+
+func TestSyntaxFunctions(t *testing.T) {
+	for _, tt := range []struct {
+		source, message      string
+		offset, line, column int
+	}{
+		{"fn x => x", "expected '(' before parameters", 3, 1, 4},
+		{"fn(x) x", "expected '=>' after parameters", 6, 1, 7},
+		{"fn(x,) => x", "expected parameter name, got )", 5, 1, 6},
+		{"fn(1) => 1", "expected parameter name, got NUMBER", 3, 1, 4},
+		{"fn(x, x) => x", `duplicate parameter "x"`, 6, 1, 7},
+		{"fn(x => x", "expected ')' after parameters", 5, 1, 6},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := Parse(lexer.New(tt.source))
+			var pe *Error
+			if p != nil || !errors.As(err, &pe) {
+				t.Fatalf("got %v, %v", p, err)
+			}
+			if pe.Message != tt.message || pe.Position != (token.Position{Offset: tt.offset, Line: tt.line, Column: tt.column}) {
+				t.Fatalf("got %#v", pe)
+			}
+			if !strings.Contains(err.Error(), tt.message) {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSyntaxFunctionsCall(t *testing.T) {
+	for _, tt := range []struct {
+		source, message      string
+		offset, line, column int
+	}{
+		{"f(1,)", "expected expression, got )", 4, 1, 5},
+		{"f(1", "expected ')' after arguments", 3, 1, 4},
+		{"f(1 2)", "expected ')' after arguments", 4, 1, 5},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := Parse(lexer.New(tt.source))
+			var pe *Error
+			if p != nil || !errors.As(err, &pe) {
+				t.Fatalf("got %v, %v", p, err)
+			}
+			if pe.Message != tt.message || pe.Position != (token.Position{Offset: tt.offset, Line: tt.line, Column: tt.column}) {
+				t.Fatalf("got %#v", pe)
+			}
+			if !strings.Contains(err.Error(), tt.message) {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSyntaxDefinitions(t *testing.T) {
+	for _, tt := range []struct {
+		source, message      string
+		offset, line, column int
+	}{
+		{"def 1() = 1; 2", "expected identifier after def", 4, 1, 5},
+		{"def f() 1; 2", "expected '=' after parameters", 8, 1, 9},
+		{"def f(x) = x", "expected ';' after definition", 12, 1, 13},
+		{"def f() = 1;", "expected expression, got EOF", 12, 1, 13},
+		{"def f() = 1; def f() = 2; 3", `duplicate definition "f"`, 17, 1, 18},
+		{"1 + def f() = 1; 2", "expected expression, got def", 4, 1, 5},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := Parse(lexer.New(tt.source))
+			var pe *Error
+			if p != nil || !errors.As(err, &pe) {
+				t.Fatalf("got %v, %v", p, err)
+			}
+			if pe.Message != tt.message || pe.Position != (token.Position{Offset: tt.offset, Line: tt.line, Column: tt.column}) {
+				t.Fatalf("got %#v", pe)
+			}
+			if !strings.Contains(err.Error(), tt.message) {
+				t.Fatal(err)
+			}
+		})
 	}
 }

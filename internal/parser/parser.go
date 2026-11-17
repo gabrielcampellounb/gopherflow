@@ -35,6 +35,28 @@ func (p *Parser) Parse() (*ast.Program, error) {
 	if err := p.advance(); err != nil {
 		return nil, err
 	}
+	var definitions []*ast.Definition
+	defined := make(map[string]bool)
+	for p.current.Type == token.Def {
+		definition, err := p.parseDefinition()
+		if err != nil {
+			return nil, err
+		}
+		if defined[definition.Name.Name] {
+			return nil, &Error{
+				Position: definition.Name.Pos,
+				Message:  fmt.Sprintf("duplicate definition %q", definition.Name.Name),
+			}
+		}
+		defined[definition.Name.Name] = true
+		definitions = append(definitions, definition)
+		if p.current.Type != token.Semicolon {
+			return nil, p.errorf("expected ';' after definition")
+		}
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+	}
 	expression, err := p.parseExpression(0)
 	if err != nil {
 		return nil, err
@@ -47,7 +69,7 @@ func (p *Parser) Parse() (*ast.Program, error) {
 	if p.current.Type != token.EOF {
 		return nil, p.errorf("expected end of input, got %s", p.current.Type)
 	}
-	return &ast.Program{Expressions: []ast.Expression{expression}}, nil
+	return &ast.Program{Definitions: definitions, Expressions: []ast.Expression{expression}}, nil
 }
 
 func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
@@ -72,8 +94,11 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 			err = p.errorf("expected ')'")
 		}
 	default:
-		if p.current.Type == token.Let {
+		switch p.current.Type {
+		case token.Let:
 			return p.parseLet()
+		case token.Fn:
+			return p.parseFunction()
 		}
 		return nil, p.errorf("expected expression, got %s", p.current.Type)
 	}
@@ -82,6 +107,12 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 	}
 	if err = p.advance(); err != nil {
 		return nil, err
+	}
+	for p.current.Type == token.LeftParen {
+		left, err = p.parseCall(left)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for precedence < precedenceOf(p.current.Type) {
@@ -97,6 +128,35 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 		left = &ast.BinaryExpression{Left: left, Operator: operator, Right: right}
 	}
 	return left, nil
+}
+
+func (p *Parser) parseDefinition() (*ast.Definition, error) {
+	position := p.current.Position
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	if p.current.Type != token.Identifier {
+		return nil, p.errorf("expected identifier after def")
+	}
+	name := &ast.Identifier{Name: p.current.Lexeme, Pos: p.current.Position}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	parameters, err := p.parseParameters()
+	if err != nil {
+		return nil, err
+	}
+	if p.current.Type != token.Assign {
+		return nil, p.errorf("expected '=' after parameters")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	body, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.Definition{Name: name, Parameters: parameters, Body: body, Pos: position}, nil
 }
 
 func (p *Parser) parseLet() (ast.Expression, error) {
@@ -132,6 +192,97 @@ func (p *Parser) parseLet() (ast.Expression, error) {
 		return nil, err
 	}
 	return &ast.LetExpression{Name: name, Value: value, Body: body, Pos: position}, nil
+}
+
+func (p *Parser) parseCall(callee ast.Expression) (ast.Expression, error) {
+	position := p.current.Position
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	var arguments []ast.Expression
+	if p.current.Type != token.RightParen {
+		for {
+			argument, err := p.parseExpression(0)
+			if err != nil {
+				return nil, err
+			}
+			arguments = append(arguments, argument)
+			if p.current.Type != token.Comma {
+				break
+			}
+			if err := p.advance(); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if p.current.Type != token.RightParen {
+		return nil, p.errorf("expected ')' after arguments")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	return &ast.CallExpression{Function: callee, Arguments: arguments, Pos: position}, nil
+}
+
+func (p *Parser) parseFunction() (ast.Expression, error) {
+	start := p.current
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	parameters, err := p.parseParameters()
+	if err != nil {
+		return nil, err
+	}
+	if p.current.Type != token.Arrow {
+		return nil, p.errorf("expected '=>' after parameters")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	body, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.FunctionLiteral{Token: start, Parameters: parameters, Body: body}, nil
+}
+
+func (p *Parser) parseParameters() ([]*ast.Identifier, error) {
+	if p.current.Type != token.LeftParen {
+		return nil, p.errorf("expected '(' before parameters")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	var parameters []*ast.Identifier
+	seen := make(map[string]bool)
+	if p.current.Type != token.RightParen {
+		for {
+			if p.current.Type != token.Identifier {
+				return nil, p.errorf("expected parameter name, got %s", p.current.Type)
+			}
+			if seen[p.current.Lexeme] {
+				return nil, p.errorf("duplicate parameter %q", p.current.Lexeme)
+			}
+			seen[p.current.Lexeme] = true
+			parameters = append(parameters, &ast.Identifier{Name: p.current.Lexeme, Pos: p.current.Position})
+			if err := p.advance(); err != nil {
+				return nil, err
+			}
+			if p.current.Type != token.Comma {
+				break
+			}
+			if err := p.advance(); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if p.current.Type != token.RightParen {
+		return nil, p.errorf("expected ')' after parameters")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	return parameters, nil
 }
 
 func precedenceOf(kind token.TokenType) int {
