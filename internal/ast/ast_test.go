@@ -33,13 +33,22 @@ func TestNodeRenderingAndPosition(t *testing.T) {
 
 func TestFunctionCallRenderingAndPosition(t *testing.T) {
 	pos := token.Position{Offset: 4, Line: 2, Column: 3}
+	opPos := token.Position{Offset: 10, Line: 2, Column: 9}
+	pipe := token.Token{Type: token.Pipe, Lexeme: "|>", Position: opPos}
+
 	x := &Identifier{Name: "x", Pos: pos}
+	y := &Identifier{Name: "y", Pos: pos}
 	n := &Literal{Value: "1", Kind: token.Number, Pos: pos}
 	sum := &BinaryExpression{Left: x, Right: n, Operator: token.Token{Lexeme: "+", Type: token.Plus, Position: pos}}
-
-	fn := &FunctionLiteral{
+	
+	fn1 := &FunctionLiteral{
 		Token:      token.Token{Type: token.Fn, Lexeme: "fn", Position: pos},
 		Parameters: []*Identifier{x},
+		Body:       sum,
+	}
+	fn2 := &FunctionLiteral{
+		Token:      token.Token{Type: token.Fn, Lexeme: "fn", Position: pos},
+		Parameters: []*Identifier{x, y},
 		Body:       sum,
 	}
 	call := &CallExpression{Function: &Identifier{Name: "f", Pos: pos}, Arguments: []Expression{n, x}, Pos: pos}
@@ -49,12 +58,15 @@ func TestFunctionCallRenderingAndPosition(t *testing.T) {
 		text     string
 		position token.Position
 	}{
-		{fn, "fn(x) => (x + 1)", pos},
+		{fn1, "fn(x) => (x + 1)", pos},
 		{&FunctionLiteral{Body: n}, "fn() => 1", token.Position{}},
 		{call, "f(1, x)", pos},
 		{&CallExpression{Function: &Identifier{Name: "f"}}, "f()", token.Position{}},
-		{&CallExpression{Function: fn, Arguments: []Expression{n}}, "(fn(x) => (x + 1))(1)", token.Position{}},
+		{&CallExpression{Function: fn1, Arguments: []Expression{n}}, "(fn(x) => (x + 1))(1)", token.Position{}},
 		{&CallExpression{Function: call}, "f(1, x)()", token.Position{}},
+		{&BinaryExpression{Left: n, Right: fn2, Operator: pipe}, "(1 |> (fn(x, y) => (x + 1)))", opPos},
+		{&BinaryExpression{Left: fn2, Right: n, Operator: pipe}, "((fn(x, y) => (x + 1)) |> 1)", opPos},
+		{&BinaryExpression{Left: n, Right: x, Operator: pipe}, "(1 |> x)", opPos},
 	} {
 		if got := tt.node.String(); got != tt.text {
 			t.Errorf("%T.String = %q, want %q", tt.node, got, tt.text)

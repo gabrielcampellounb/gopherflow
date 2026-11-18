@@ -204,7 +204,6 @@ func TestFunctionAST(t *testing.T) {
 		want   ast.Expression
 	}{
 		{
-			// fn(x) => x + 1
 			"fn(x) => x + 1",
 			&ast.FunctionLiteral{
 				Token:      fnToken(0),
@@ -217,7 +216,6 @@ func TestFunctionAST(t *testing.T) {
 			},
 		},
 		{
-			// fn() => 1
 			"fn() => 1",
 			&ast.FunctionLiteral{
 				Token: fnToken(0),
@@ -225,7 +223,6 @@ func TestFunctionAST(t *testing.T) {
 			},
 		},
 		{
-			// fn(a, b) => a
 			"fn(a, b) => a",
 			&ast.FunctionLiteral{
 				Token:      fnToken(0),
@@ -234,7 +231,6 @@ func TestFunctionAST(t *testing.T) {
 			},
 		},
 		{
-			// fn(x) => fn(y) => x + y
 			"fn(x) => fn(y) => x + y",
 			&ast.FunctionLiteral{
 				Token:      fnToken(0),
