@@ -72,14 +72,14 @@ func TestEvaluationErrorsAndOrder(t *testing.T) {
 }
 
 func TestEnvironmentScopes(t *testing.T) {
-	parent := NewEnvironment(nil)
+	parent := runtime.NewEnvironment(nil)
 	parent.Set("x", runtime.Number(10))
-	child := NewEnvironment(parent)
+	child := runtime.NewEnvironment(parent)
 	child.Set("x", runtime.Number(20))
 	child.Set("y", runtime.Bool(true))
-	grandchild := NewEnvironment(child)
+	grandchild := runtime.NewEnvironment(child)
 	for _, tt := range []struct {
-		env   *Environment
+		env   *runtime.Environment
 		name  string
 		want  runtime.Value
 		found bool
@@ -234,5 +234,50 @@ func TestNaNIsNotEqualToItself(t *testing.T) {
 	source := "let x = " + huge + " * " + huge + " in (x / x) == (x / x)"
 	if got := evaluate(t, source); got != runtime.Bool(false) {
 		t.Fatalf("NaN equality = %v", got)
+	}
+}
+
+func TestCallEvaluationErrors(t *testing.T) {
+	for _, tt := range []struct{ source, message string }{
+		{"1(2)", "type error at 1:2: Number is not callable"},
+		{"null()", "Null is not callable"},
+		{"let f = fn(x) => x in f()", "arity error at 1:24: function expects 1 arguments, got 0"},
+		{"(fn() => 1)(2)", "function expects 0 arguments, got 1"},
+		{"missing(1)", `undefined identifier "missing"`},
+		{"let f = fn(x) => y in f(1)", `undefined identifier "y"`},
+		{"let f = fn(x) => x in f(missing)", `undefined identifier "missing"`},
+		{"first(second)", `undefined identifier "first"`},
+		{"let f = fn() => secret in let secret = 1 in f()", `undefined identifier "secret"`},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := parser.Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(p)
+			if err == nil || value != nil || !strings.Contains(err.Error(), tt.message) {
+				t.Fatalf("got %v, %v; want %q", value, err, tt.message)
+			}
+		})
+	}
+}
+
+func TestDefinitionErrors(t *testing.T) {
+	for _, tt := range []struct{ source, message string }{
+		{"def f() = missing(); f()", `undefined identifier "missing"`},
+		{"def f(x) = x; f()", "function expects 1 arguments, got 0"},
+		{"def f() = 1; f(1)", "function expects 0 arguments, got 1"},
+		{"def f() = 1; f()()", "Number is not callable"},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := parser.Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(p)
+			if err == nil || value != nil || !strings.Contains(err.Error(), tt.message) {
+				t.Fatalf("got %v, %v; want %q", value, err, tt.message)
+			}
+		})
 	}
 }

@@ -9,42 +9,33 @@ import (
 	"github.com/gabrielcampellounb/gopherflow/internal/token"
 )
 
-type Environment struct {
-	values map[string]runtime.Value
-	parent *Environment
-}
-
-func NewEnvironment(parent *Environment) *Environment {
-	return &Environment{values: make(map[string]runtime.Value), parent: parent}
-}
-
-func (e *Environment) Get(name string) (runtime.Value, bool) {
-	value, ok := e.values[name]
-	if ok {
-		return value, true
-	}
-	if e.parent != nil {
-		return e.parent.Get(name)
-	}
-	return nil, false
-}
-
-func (e *Environment) Set(name string, value runtime.Value) {
-	e.values[name] = value
-}
-
 func Evaluate(program *ast.Program) (runtime.Value, error) {
-	return EvaluateIn(program, NewEnvironment(nil))
+	return EvaluateIn(program, runtime.NewEnvironment(nil))
 }
 
-func EvaluateIn(program *ast.Program, environment *Environment) (runtime.Value, error) {
+func EvaluateIn(program *ast.Program, environment *runtime.Environment) (runtime.Value, error) {
 	if len(program.Expressions) == 0 {
 		return runtime.Null{}, nil
 	}
-	return evaluateExpression(program.Expressions[0], environment)
+	scope := environment
+	if len(program.Definitions) > 0 {
+		scope = runtime.NewEnvironment(environment)
+		for _, definition := range program.Definitions {
+			names := make([]string, len(definition.Parameters))
+			for i, parameter := range definition.Parameters {
+				names[i] = parameter.Name
+			}
+			scope.Set(definition.Name.Name, runtime.Function{
+				Parameters: names,
+				Body:       definition.Body,
+				Env:        scope,
+			})
+		}
+	}
+	return evaluateExpression(program.Expressions[0], scope)
 }
 
-func evaluateExpression(expression ast.Expression, environment *Environment) (runtime.Value, error) {
+func evaluateExpression(expression ast.Expression, environment *runtime.Environment) (runtime.Value, error) {
 	switch node := expression.(type) {
 	case *ast.Identifier:
 		value, ok := environment.Get(node.Name)
@@ -59,16 +50,56 @@ func evaluateExpression(expression ast.Expression, environment *Environment) (ru
 		if err != nil {
 			return nil, err
 		}
-		child := NewEnvironment(environment)
+		child := runtime.NewEnvironment(environment)
 		child.Set(node.Name.Name, value)
 		return evaluateExpression(node.Body, child)
 	case *ast.BinaryExpression:
 		return evaluateBinary(node, environment)
-	//case *ast.FunctionLiteral:
-	//	params := node.Parameters
-	//	body := node.Body
+	case *ast.FunctionLiteral:
+		parameters := make([]string, len(node.Parameters))
+		for i, parameter := range node.Parameters {
+			parameters[i] = parameter.Name
+		}
+		return runtime.Function{
+			Parameters: parameters,
+			Body:       node.Body,
+			Env:        environment,
+		}, nil
+	case *ast.CallExpression:
+		return evaluateCall(node, environment)
 	default:
 		return nil, fmt.Errorf("unsupported expression %T", expression)
+	}
+}
+
+func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (runtime.Value, error) {
+	callee, err := evaluateExpression(call.Function, environment)
+	if err != nil {
+		return nil, err
+	}
+	arguments := make([]runtime.Value, len(call.Arguments))
+	for i, argument := range call.Arguments {
+		arguments[i], err = evaluateExpression(argument, environment)
+		if err != nil {
+			return nil, err
+		}
+	}
+	position := call.Pos
+	switch function := callee.(type) {
+		case runtime.Function:
+			if len(arguments) != len(function.Parameters) {
+				return nil, fmt.Errorf("arity error at %d:%d: function expects %d arguments, got %d",
+					position.Line, position.Column, len(function.Parameters), len(arguments))
+			}
+			scope := runtime.NewEnvironment(function.Env)
+			for i, name := range function.Parameters {
+				scope.Set(name, arguments[i])
+			}
+			return evaluateExpression(function.Body, scope)
+		//case runtime.Builtin:
+		default:
+			return nil, fmt.Errorf("type error at %d:%d: %s is not callable",
+				position.Line, position.Column, callee.Type())
 	}
 }
 
@@ -93,7 +124,7 @@ func evaluateLiteral(literal *ast.Literal) (runtime.Value, error) {
 	}
 }
 
-func evaluateBinary(expression *ast.BinaryExpression, environment *Environment) (runtime.Value, error) {
+func evaluateBinary(expression *ast.BinaryExpression, environment *runtime.Environment) (runtime.Value, error) {
 	left, err := evaluateExpression(expression.Left, environment)
 	if err != nil {
 		return nil, err

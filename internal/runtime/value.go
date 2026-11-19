@@ -5,7 +5,33 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gabrielcampellounb/gopherflow/internal/ast"
 )
+
+type Environment struct {
+	values map[string]Value
+	parent *Environment
+}
+
+func NewEnvironment(parent *Environment) *Environment {
+	return &Environment{values: make(map[string]Value), parent: parent}
+}
+
+func (e *Environment) Get(name string) (Value, bool) {
+	value, ok := e.values[name]
+	if ok {
+		return value, true
+	}
+	if e.parent != nil {
+		return e.parent.Get(name)
+	}
+	return nil, false
+}
+
+func (e *Environment) Set(name string, value Value) {
+	e.values[name] = value
+}
 
 type Type string
 
@@ -75,19 +101,17 @@ func (r Record) Inspect() string {
 
 type Function struct {
 	Parameters []string
-	Body       any
+	Body       ast.Expression
+	Env        *Environment
 }
 
 func (Function) Type() Type { return FunctionType }
 func (f Function) Inspect() string {
-	params := strings.Join(f.Parameters, ", ")
-
-	body, ok := f.Body.(interface{ String() string })
-	if !ok {
-		return fmt.Sprintf("fn(%s) => %v", params, f.Body)
+	body := "<nil>"
+	if f.Body != nil {
+		body = f.Body.String()
 	}
-
-	return fmt.Sprintf("fn(%s) => %s", params, body.String())
+	return fmt.Sprintf("fn(%s) => %s", strings.Join(f.Parameters, ", "), body)
 }
 
 type Builtin struct {

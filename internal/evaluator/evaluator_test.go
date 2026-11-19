@@ -21,6 +21,16 @@ func evaluate(t *testing.T, input string) runtime.Value {
 	return value
 }
 
+func evaluateFunction(t *testing.T, source string) runtime.Function {
+	t.Helper()
+	value := evaluate(t, source)
+	function, ok := value.(runtime.Function)
+	if !ok {
+		t.Fatalf("Evaluate(%q) = %T, want runtime.Function", source, value)
+	}
+	return function
+}
+
 func TestEvaluateExpressions(t *testing.T) {
 	tests := []struct {
 		input string
@@ -51,27 +61,93 @@ func TestEvaluateErrors(t *testing.T) {
 	}
 }
 
-/*func TestFunctionObject(t *testing.T) {
-	input := "fn(x) => x + 2;"
+func TestEvaluateFunctions(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"fn(x) => x + 1", "fn(x) => (x + 1)"},
+		{"fn() => 1", "fn() => 1"},
+		{"fn(a, b) => a", "fn(a, b) => a"},
+		{"fn(x) => y", "fn(x) => y"},
+	}
+	for _, tt := range tests {
+		if got := evaluate(t, tt.input).Inspect(); got != tt.want {
+			t.Errorf("Evaluate(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
 
-	evaluated := testEval(input)
-	fn, ok := evaluated.(*object.Function)
-	if !ok {
-		t.Fatalf("object is not Function. got=%T (%+v)", evaluated, evaluated)
+func TestEvaluateCall(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"(fn(x) => x + 1)(41)", "42"},
+		{"(fn() => 7)()", "7"},
+		{`let add = fn(a, b) => a + b in add(1, 2)`, `3`},
+		{`let id = fn(x) => x in id("hi")`, `"hi"`},
+		{"let apply = fn(f) => f(10) in apply(fn(x) => x - 1)", "9"},
+		{"let apply = fn(f) => f(10) in apply(fn(x) => x * 5)", "50"},
+	}
+	for _, tt := range tests {
+		if got := evaluate(t, tt.input).Inspect(); got != tt.want {
+			t.Errorf("Evaluate(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestEvaluateDefinition(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"def square(x) = x * x; square(7)", "49"},
+		{"def five() = 5; five()", "5"},
+		{"def twice(f, x) = f(f(x)); twice(fn(n) => n + 3, 1)", "7"},
+		{"def inc(x) = x + 1; def twice(f, x) = f(f(x)); twice(inc, 1)", "3"},
+		{"def f(x) = g(x); def g(x) = x; f(5)", "5"},
+		{"def f(x) = g(x) + 1; def g(x) = x * 2; f(5)", "11"},
+		{"def f(x) = x; f", "fn(x) => x"},
+		{"def f() = 1; f() + f()", "2"},
+		{"def f() = 1; def g(f) = f; g(5)", "5"},
+		{"def x() = 1; let x = 2 in x", "2"},
+		{"def make(n) = fn(x) => x + n; make(1)(2)	", "3"},
+		{"def f() = 1; let f = 2 in f", "2"},
 	}
 
-	if len(fn.Parameters) != 1 {
-		t.Fatalf("function has wrong parameters. Parameters=%+v",
-			fn.Parameters)
+	for _, tt := range tests {
+		if got := evaluate(t, tt.input).Inspect(); got != tt.want {
+			t.Errorf("Evaluate(%q) = %q, want %q", tt.input, got, tt.want)
+		}
 	}
+}
 
-	if fn.Parameters[0].String() != "x" {
-		t.Fatalf("parameter is not 'x'. got=%q", fn.Parameters[0])
-	}
+func TestFunctionCapturesEnvironment(t *testing.T) {
+	t.Run("captures n's let", func(t *testing.T) {
+		function := evaluateFunction(t, "let n = 1 in fn(x) => x + n")
+		n, found := function.Env.Get("n")
+		if !found || n != runtime.Number(1) {
+			t.Fatalf("n = %v, %v; want 1, true", n, found)
+		}
+	})
 
-	expectedBody := "(x + 2)"
-
-	if fn.Body.String() != expectedBody {
-		t.Fatalf("body is not %q. got=%q", expectedBody, fn.Body.String())
-	}
-}*/
+	t.Run("keep the same environment", func(t *testing.T) {
+		program, err := parser.Parse(lexer.New("fn(x) => x"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		env := runtime.NewEnvironment(nil)
+		value, err := EvaluateIn(program, env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		function, ok := value.(runtime.Function)
+		if !ok {
+			t.Fatalf("got %T, want runtime.Function", value)
+		}
+		if function.Env != env {
+			t.Fatal("Env is not the environment in which the fn was evaluated")
+		}
+	})
+}
