@@ -86,20 +86,20 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 	}
 	position := call.Pos
 	switch function := callee.(type) {
-		case runtime.Function:
-			if len(arguments) != len(function.Parameters) {
-				return nil, fmt.Errorf("arity error at %d:%d: function expects %d arguments, got %d",
-					position.Line, position.Column, len(function.Parameters), len(arguments))
-			}
-			scope := runtime.NewEnvironment(function.Env)
-			for i, name := range function.Parameters {
-				scope.Set(name, arguments[i])
-			}
-			return evaluateExpression(function.Body, scope)
-		//case runtime.Builtin:
-		default:
-			return nil, fmt.Errorf("type error at %d:%d: %s is not callable",
-				position.Line, position.Column, callee.Type())
+	case runtime.Function:
+		if len(arguments) != len(function.Parameters) {
+			return nil, fmt.Errorf("arity error at %d:%d: function expects %d arguments, got %d",
+				position.Line, position.Column, len(function.Parameters), len(arguments))
+		}
+		scope := runtime.NewEnvironment(function.Env)
+		for i, name := range function.Parameters {
+			scope.Set(name, arguments[i])
+		}
+		return evaluateExpression(function.Body, scope)
+	//case runtime.Builtin:
+	default:
+		return nil, fmt.Errorf("type error at %d:%d: %s is not callable",
+			position.Line, position.Column, callee.Type())
 	}
 }
 

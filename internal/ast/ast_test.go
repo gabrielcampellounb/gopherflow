@@ -40,7 +40,7 @@ func TestFunctionCallRenderingAndPosition(t *testing.T) {
 	y := &Identifier{Name: "y", Pos: pos}
 	n := &Literal{Value: "1", Kind: token.Number, Pos: pos}
 	sum := &BinaryExpression{Left: x, Right: n, Operator: token.Token{Lexeme: "+", Type: token.Plus, Position: pos}}
-	
+
 	fn1 := &FunctionLiteral{
 		Token:      token.Token{Type: token.Fn, Lexeme: "fn", Position: pos},
 		Parameters: []*Identifier{x},
