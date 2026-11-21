@@ -42,6 +42,37 @@ func (p *Program) Position() token.Position {
 	return p.Expressions[0].Position()
 }
 
+type ListLiteral struct {
+	Elements []Expression
+	Pos      token.Position
+}
+
+func (l *ListLiteral) expressionNode() {}
+
+func (l *ListLiteral) String() string {
+	elements := make([]string, len(l.Elements))
+	for i, element := range l.Elements {
+		elements[i] = element.String()
+	}
+	return "[" + strings.Join(elements, ", ") + "]"
+}
+
+func (l *ListLiteral) Position() token.Position { return l.Pos }
+
+type IndexExpression struct {
+	Target Expression
+	Index  Expression
+	Pos    token.Position
+}
+
+func (i *IndexExpression) expressionNode() {}
+
+func (i *IndexExpression) String() string {
+	return postfixTargetString(i.Target) + "[" + i.Index.String() + "]"
+}
+
+func (i *IndexExpression) Position() token.Position { return i.Pos }
+
 type Definition struct {
 	Name       *Identifier
 	Parameters []*Identifier
@@ -68,7 +99,7 @@ func (c *CallExpression) String() string {
 	for i, argument := range c.Arguments {
 		args[i] = argument.String()
 	}
-	return calleeString(c.Function) + "(" + strings.Join(args, ", ") + ")"
+	return postfixTargetString(c.Function) + "(" + strings.Join(args, ", ") + ")"
 }
 
 func (c *CallExpression) Position() token.Position { return c.Pos }
@@ -182,7 +213,7 @@ func identifierList(identifiers []*Identifier) string {
 	return strings.Join(names, ", ")
 }
 
-func calleeString(expression Expression) string {
+func postfixTargetString(expression Expression) string {
 	switch expression.(type) {
 	case *FunctionLiteral, *LetExpression:
 		return "(" + expression.String() + ")"

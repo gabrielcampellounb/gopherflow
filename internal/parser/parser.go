@@ -78,13 +78,16 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 	switch p.current.Type {
 	case token.Identifier:
 		left = &ast.Identifier{Name: p.current.Lexeme, Pos: p.current.Position}
+
 	case token.Number:
 		if _, err = strconv.ParseFloat(p.current.Lexeme, 64); err != nil {
 			return nil, p.errorf("invalid number %q", p.current.Lexeme)
 		}
 		left = &ast.Literal{Value: p.current.Lexeme, Kind: token.Number, Pos: p.current.Position}
+
 	case token.String, token.True, token.False, token.Null:
 		left = &ast.Literal{Value: p.current.Lexeme, Kind: p.current.Type, Pos: p.current.Position}
+
 	case token.LeftParen:
 		if err = p.advance(); err != nil {
 			return nil, err
@@ -93,6 +96,14 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 		if err == nil && p.current.Type != token.RightParen {
 			err = p.errorf("expected ')'")
 		}
+
+	case token.LeftBracket:
+		position := p.current.Position
+		if err = p.advance(); err != nil {
+			return nil, err
+		}
+		left, err = p.parseList(position)
+
 	default:
 		switch p.current.Type {
 		case token.Let:
@@ -102,17 +113,16 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 		}
 		return nil, p.errorf("expected expression, got %s", p.current.Type)
 	}
+
 	if err != nil {
 		return nil, err
 	}
 	if err = p.advance(); err != nil {
 		return nil, err
 	}
-	for p.current.Type == token.LeftParen {
-		left, err = p.parseCall(left)
-		if err != nil {
-			return nil, err
-		}
+	left, err = p.parseSuffixes(left)
+	if err != nil {
+		return nil, err
 	}
 
 	for precedence < precedenceOf(p.current.Type) {
@@ -283,6 +293,64 @@ func (p *Parser) parseParameters() ([]*ast.Identifier, error) {
 		return nil, err
 	}
 	return parameters, nil
+}
+
+func (p *Parser) parseList(position token.Position) (ast.Expression, error) {
+	var elements []ast.Expression
+	if p.current.Type != token.RightBracket {
+		for {
+			element, err := p.parseExpression(0)
+			if err != nil {
+				return nil, err
+			}
+			elements = append(elements, element)
+			if p.current.Type != token.Comma {
+				break
+			}
+			if err := p.advance(); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if p.current.Type != token.RightBracket {
+		return nil, p.errorf("expected ']' after list elements")
+	}
+	return &ast.ListLiteral{Elements: elements, Pos: position}, nil
+}
+
+func (p *Parser) parseIndex(target ast.Expression) (ast.Expression, error) {
+	position := p.current.Position
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	index, err := p.parseExpression(0)
+	if err != nil {
+		return nil, err
+	}
+	if p.current.Type != token.RightBracket {
+		return nil, p.errorf("expected ']' after index")
+	}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	return &ast.IndexExpression{Target: target, Index: index, Pos: position}, nil
+}
+
+func (p *Parser) parseSuffixes(left ast.Expression) (ast.Expression, error) {
+	for {
+		var err error
+		switch p.current.Type {
+		case token.LeftParen:
+			left, err = p.parseCall(left)
+		case token.LeftBracket:
+			left, err = p.parseIndex(left)
+		default:
+			return left, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
 }
 
 func precedenceOf(kind token.TokenType) int {

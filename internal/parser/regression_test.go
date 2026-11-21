@@ -116,7 +116,7 @@ func TestLexicalErrorsPropagate(t *testing.T) {
 }
 
 func TestInvalidAndUnimplementedSyntax(t *testing.T) {
-	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "[1]", "{x: 1}", "if true then 1 else 2", "x.y", "x[0]", "-1", "not true", "1; 2", strings.Repeat("9", 400)} {
+	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "{x: 1}", "if true then 1 else 2", "x.y", "-1", "not true", "1; 2", strings.Repeat("9", 400)} {
 		p, err := Parse(lexer.New(source))
 		if err == nil || p != nil {
 			t.Errorf("accepted %q: %v", source, p)
@@ -324,6 +324,14 @@ func TestFunctionCallAST(t *testing.T) {
 				Pos: at(11),
 			},
 		},
+		{
+			"xs[0](2)",
+			&ast.CallExpression{
+				Function:  &ast.IndexExpression{Target: ident("xs", 0), Index: number("0", 3), Pos: at(2)},
+				Arguments: []ast.Expression{number("2", 6)},
+				Pos:       at(5),
+			},
+		},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			got, err := Parse(lexer.New(tt.source))
@@ -438,6 +446,127 @@ func TestDefinitionAST(t *testing.T) {
 	}
 }
 
+func TestListAST(t *testing.T) {
+	at := func(offset int) token.Position {
+		return token.Position{Offset: offset, Line: 1, Column: offset + 1}
+	}
+	ident := func(name string, offset int) *ast.Identifier {
+		return &ast.Identifier{Name: name, Pos: at(offset)}
+	}
+	number := func(value string, offset int) *ast.Literal {
+		return &ast.Literal{Value: value, Kind: token.Number, Pos: at(offset)}
+	}
+
+	for _, tt := range []struct {
+		source string
+		want   ast.Expression
+	}{
+		{
+			"[]",
+			&ast.ListLiteral{Pos: at(0)},
+		},
+		{
+			"[1, x]",
+			&ast.ListLiteral{
+				Elements: 	[]ast.Expression{number("1", 1), ident("x", 4)},
+				Pos: 		at(0),
+			},
+		},
+		{
+			"[[1], []]",
+			&ast.ListLiteral{
+				Elements: 	[]ast.Expression{
+					&ast.ListLiteral{Pos: at(1), Elements: []ast.Expression{number("1", 2)}},
+					&ast.ListLiteral{Pos: at(6)}},
+				Pos: 		at(0),
+			},
+		},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			got, err := Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := &ast.Program{Expressions: []ast.Expression{tt.want}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("unexpected AST:\n got: %s\nwant: %s", got, want)
+			}
+		})
+	}
+}
+
+func TestListIndexAST(t *testing.T) {
+	at := func(offset int) token.Position {
+		return token.Position{Offset: offset, Line: 1, Column: offset + 1}
+	}
+	ident := func(name string, offset int) *ast.Identifier {
+		return &ast.Identifier{Name: name, Pos: at(offset)}
+	}
+	number := func(value string, offset int) *ast.Literal {
+		return &ast.Literal{Value: value, Kind: token.Number, Pos: at(offset)}
+	}
+
+	for _, tt := range []struct {
+		source string
+		want   ast.Expression
+	}{
+		{
+			"xs[0]",
+			&ast.IndexExpression{
+				Target: ident("xs", 0),
+				Index:  number("0", 3),
+				Pos:    at(2),
+			},
+		},
+		{
+			"[1, 2][0]",
+			&ast.IndexExpression{
+				Target: &ast.ListLiteral{
+					Elements:	[]ast.Expression{number("1", 1), number("2", 4)},
+					Pos:		at(0),
+				},
+				Index:  number("0", 7),
+				Pos:    at(6),
+			},
+		},
+		{
+			"m[0][1]",
+			&ast.IndexExpression{
+				Target: &ast.IndexExpression{
+					Target: ident("m", 0),
+					Index:  number("0", 2),
+					Pos:    at(1),
+				},
+				Index:  number("1", 5),
+				Pos:    at(4),
+			},
+		},
+		{
+			"f(1)[0]",
+			&ast.IndexExpression{
+				Target: &ast.CallExpression{
+					Function:	ident("f", 0),	
+					Arguments: 	[]ast.Expression{number("1", 2)},
+					Pos:		at(1),
+				},
+				Index:  number("0", 5),
+				Pos:    at(4),
+			},
+		},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			got, err := Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := &ast.Program{Expressions: []ast.Expression{tt.want}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("unexpected AST:\n got: %s\nwant: %s", got, want)
+			}
+		})
+	}
+}
+
 func TestSyntaxFunctions(t *testing.T) {
 	for _, tt := range []struct {
 		source, message      string
@@ -502,6 +631,61 @@ func TestSyntaxDefinitions(t *testing.T) {
 		{"def f() = 1;", "expected expression, got EOF", 12, 1, 13},
 		{"def f() = 1; def f() = 2; 3", `duplicate definition "f"`, 17, 1, 18},
 		{"1 + def f() = 1; 2", "expected expression, got def", 4, 1, 5},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := Parse(lexer.New(tt.source))
+			var pe *Error
+			if p != nil || !errors.As(err, &pe) {
+				t.Fatalf("got %v, %v", p, err)
+			}
+			if pe.Message != tt.message || pe.Position != (token.Position{Offset: tt.offset, Line: tt.line, Column: tt.column}) {
+				t.Fatalf("got %#v", pe)
+			}
+			if !strings.Contains(err.Error(), tt.message) {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSyntaxList(t *testing.T) {
+	for _, tt := range []struct {
+		source, message      string
+		offset, line, column int
+	}{
+		{"[1,]", "expected expression, got ]", 3, 1, 4},
+		{"[1", "expected ']' after list elements", 2, 1, 3},
+		{"[", "expected expression, got EOF", 1, 1, 2},
+		{"]", "expected expression, got ]", 0, 1, 1},
+		{"[1]]", "expected end of input, got ]", 3, 1, 4},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := Parse(lexer.New(tt.source))
+			var pe *Error
+			if p != nil || !errors.As(err, &pe) {
+				t.Fatalf("got %v, %v", p, err)
+			}
+			if pe.Message != tt.message || pe.Position != (token.Position{Offset: tt.offset, Line: tt.line, Column: tt.column}) {
+				t.Fatalf("got %#v", pe)
+			}
+			if !strings.Contains(err.Error(), tt.message) {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSyntaxListIndex(t *testing.T) {
+	for _, tt := range []struct {
+		source, message      string
+		offset, line, column int
+	}{
+		{"xs[]", "expected expression, got ]", 3, 1, 4},
+		{"xs[", "expected expression, got EOF", 3, 1, 4},
+		{"xs[0", "expected ']' after index", 4, 1, 5},
+		{"xs[0 1]", "expected ']' after index", 5, 1, 6},
+		{"xs[0, 1]", "expected ']' after index", 4, 1, 5},
+		{"xs[0]]", "expected end of input, got ]", 5, 1, 6},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			p, err := Parse(lexer.New(tt.source))
