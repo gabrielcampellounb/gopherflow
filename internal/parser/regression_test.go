@@ -468,17 +468,17 @@ func TestListAST(t *testing.T) {
 		{
 			"[1, x]",
 			&ast.ListLiteral{
-				Elements: 	[]ast.Expression{number("1", 1), ident("x", 4)},
-				Pos: 		at(0),
+				Elements: []ast.Expression{number("1", 1), ident("x", 4)},
+				Pos:      at(0),
 			},
 		},
 		{
 			"[[1], []]",
 			&ast.ListLiteral{
-				Elements: 	[]ast.Expression{
+				Elements: []ast.Expression{
 					&ast.ListLiteral{Pos: at(1), Elements: []ast.Expression{number("1", 2)}},
 					&ast.ListLiteral{Pos: at(6)}},
-				Pos: 		at(0),
+				Pos: at(0),
 			},
 		},
 	} {
@@ -522,11 +522,11 @@ func TestListIndexAST(t *testing.T) {
 			"[1, 2][0]",
 			&ast.IndexExpression{
 				Target: &ast.ListLiteral{
-					Elements:	[]ast.Expression{number("1", 1), number("2", 4)},
-					Pos:		at(0),
+					Elements: []ast.Expression{number("1", 1), number("2", 4)},
+					Pos:      at(0),
 				},
-				Index:  number("0", 7),
-				Pos:    at(6),
+				Index: number("0", 7),
+				Pos:   at(6),
 			},
 		},
 		{
@@ -537,20 +537,20 @@ func TestListIndexAST(t *testing.T) {
 					Index:  number("0", 2),
 					Pos:    at(1),
 				},
-				Index:  number("1", 5),
-				Pos:    at(4),
+				Index: number("1", 5),
+				Pos:   at(4),
 			},
 		},
 		{
 			"f(1)[0]",
 			&ast.IndexExpression{
 				Target: &ast.CallExpression{
-					Function:	ident("f", 0),	
-					Arguments: 	[]ast.Expression{number("1", 2)},
-					Pos:		at(1),
+					Function:  ident("f", 0),
+					Arguments: []ast.Expression{number("1", 2)},
+					Pos:       at(1),
 				},
-				Index:  number("0", 5),
-				Pos:    at(4),
+				Index: number("0", 5),
+				Pos:   at(4),
 			},
 		},
 	} {

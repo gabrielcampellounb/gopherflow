@@ -123,6 +123,55 @@ func TestEvaluateDefinition(t *testing.T) {
 	}
 }
 
+func TestEvaluateList(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"[]", "[]"},
+		{"[1, 2, 3]", "[1, 2, 3]"},
+		{`["a", true, null]`, `["a", true, null]`},
+		{"[[1], [], [2, 3]]", "[[1], [], [2, 3]]"},
+		{"let x = 5 in [x, x + 1]", "[5, 6]"},
+		{"[let a = 1 in a, 2]", "[1, 2]"},
+		{"(fn(x) => [x, x])(7)", "[7, 7]"},
+		{"def f(x) = [x]; [f(1), f(2)]", "[[1], [2]]"},
+	}
+	for _, tt := range tests {
+		if got := evaluate(t, tt.input).Inspect(); got != tt.want {
+			t.Errorf("Evaluate(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestEvaluateIndex(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"[10, 20, 30][0]", "10"},
+		{"[10, 20, 30][2]", "30"},
+		{"[10, 20, 30][1 + 1]", "30"},
+		{"[10, 20][1.0]", "20"},
+		{"let xs = [1, 2] in xs[1]", "2"},
+		{"[[1, 2], [3]][1]", "[3]"},
+		{"[[1, 2], [3]][0][1]", "2"},
+		{"[0, 1][[1][0]]", "1"},
+		{`["a", true, null][2]`, "null"},
+		{"def first(xs) = xs[0]; first([7, 8])", "7"},
+		{"(fn(xs) => xs[1])([5, 6])", "6"},
+		{"[fn(x) => x + 1, fn(x) => x * 2][1](10)", "20"},
+		{"[1, 2][0] + [3, 4][1]", "5"},
+		{"1 + [2, 3][0] * 4", "9"},
+		{"[1, 2][0] == 1", "true"},
+	}
+	for _, tt := range tests {
+		if got := evaluate(t, tt.input).Inspect(); got != tt.want {
+			t.Errorf("Evaluate(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestFunctionCapturesEnvironment(t *testing.T) {
 	t.Run("captures n's let", func(t *testing.T) {
 		function := evaluateFunction(t, "let n = 1 in fn(x) => x + n")

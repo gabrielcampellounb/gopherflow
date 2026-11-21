@@ -281,3 +281,30 @@ func TestDefinitionErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestIndexErrors(t *testing.T) {
+	for _, tt := range []struct{ source, message string }{
+		{"[1, 2][2]", "runtime error at 1:7: list index 2 out of range (length 2)"},
+		{"[][0]", "list index 0 out of range (length 0)"},
+		{"[1, 2][0 - 1]", "list index -1 out of range (length 2)"},
+		{"[1, 2][1.5]", "list index must be an integer, got 1.5"},
+		{`[1, 2]["a"]`, "type error at 1:7: list index must be a Number, got String"},
+		{"[1, 2][null]", "got Null"},
+		{"1[0]", "type error at 1:2: Number is not indexable"},
+		{`"abc"[0]`, "String is not indexable"},
+		{"null[0]", "Null is not indexable"},
+		{"(fn(x) => x)[0]", "Function is not indexable"},
+		{"missing[0]", `undefined identifier "missing"`},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			p, err := parser.Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := Evaluate(p)
+			if err == nil || value != nil || !strings.Contains(err.Error(), tt.message) {
+				t.Fatalf("got %v, %v; want %q", value, err, tt.message)
+			}
+		})
+	}
+}

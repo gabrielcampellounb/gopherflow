@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/ast"
@@ -67,6 +68,18 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 		}, nil
 	case *ast.CallExpression:
 		return evaluateCall(node, environment)
+	case *ast.ListLiteral:
+		elements := make(runtime.List, len(node.Elements))
+		for i, element := range node.Elements {
+			value, err := evaluateExpression(element, environment)
+			if err != nil {
+				return nil, err
+			}
+			elements[i] = value
+		}
+		return elements, nil
+	case *ast.IndexExpression:
+		return evaluateIndex(node, environment)
 	default:
 		return nil, fmt.Errorf("unsupported expression %T", expression)
 	}
@@ -101,6 +114,38 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 		return nil, fmt.Errorf("type error at %d:%d: %s is not callable",
 			position.Line, position.Column, callee.Type())
 	}
+}
+
+func evaluateIndex(expression *ast.IndexExpression, environment *runtime.Environment) (runtime.Value, error) {
+	target, err := evaluateExpression(expression.Target, environment)
+	if err != nil {
+		return nil, err
+	}
+	index, err := evaluateExpression(expression.Index, environment)
+	if err != nil {
+		return nil, err
+	}
+	position := expression.Pos
+	list, ok := target.(runtime.List)
+	if !ok {
+		return nil, fmt.Errorf("type error at %d:%d: %s is not indexable",
+			position.Line, position.Column, target.Type())
+	}
+	number, ok := index.(runtime.Number)
+	if !ok {
+		return nil, fmt.Errorf("type error at %d:%d: list index must be a Number, got %s",
+			position.Line, position.Column, index.Type())
+	}
+	value := float64(number)
+	if value != math.Trunc(value) {
+		return nil, fmt.Errorf("runtime error at %d:%d: list index must be an integer, got %s",
+			position.Line, position.Column, number.Inspect())
+	}
+	if value < 0 || value >= float64(len(list)) {
+		return nil, fmt.Errorf("runtime error at %d:%d: list index %s out of range (length %d)",
+			position.Line, position.Column, number.Inspect(), len(list))
+	}
+	return list[int(value)], nil
 }
 
 func evaluateLiteral(literal *ast.Literal) (runtime.Value, error) {
