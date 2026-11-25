@@ -183,3 +183,46 @@ func TestIdentifiersStartWithASCIILetter(t *testing.T) {
 		}
 	}
 }
+
+func TestLineEndingPositions(t *testing.T) {
+	for _, tt := range []struct {
+		name, source string
+		offset       int
+		line         int
+	}{
+		{"initial LF", "\nx", 1, 2},
+		{"CR only", "a\rb", 2, 2},
+		{"LF only", "a\nb", 2, 2},
+		{"CRLF", "a\r\nb", 3, 2},
+		{"mixed", "a\r\r\n\nb", 5, 4},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.source)
+			if tt.source[0] == 'a' {
+				if _, err := lexer.Next(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := lexer.Next()
+			want := token.Position{Offset: tt.offset, Line: tt.line, Column: 1}
+			if err != nil || got.Position != want || got.Type != token.Identifier {
+				t.Fatalf("got %v, %v, want identifier at %+v", got, err, want)
+			}
+		})
+	}
+}
+
+func TestStringsRejectLiteralLineEndings(t *testing.T) {
+	for _, lineEnding := range []string{"\r", "\n", "\r\n"} {
+		_, err := New("\"first" + lineEnding + "second\"").Next()
+		var lexicalError *Error
+		if !errors.As(err, &lexicalError) || lexicalError.Message != "unterminated string" ||
+			lexicalError.Position != (token.Position{Line: 1, Column: 1}) {
+			t.Errorf("literal line ending %q returned %v", lineEnding, err)
+		}
+	}
+	got, err := New(`"first\r\nsecond"`).Next()
+	if err != nil || got.Lexeme != "first\r\nsecond" {
+		t.Fatalf("escaped line ending: got %v, %v", got, err)
+	}
+}

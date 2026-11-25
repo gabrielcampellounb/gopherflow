@@ -184,3 +184,26 @@ func TestCLIStopsWhenStreamingCollectionFails(t *testing.T) {
 		t.Fatalf("status=%d first write size=%d stderr=%q", status, stdout.maxChunk, stderr.String())
 	}
 }
+
+func TestCLIShowsDistinctCSVRecordKeysUnambiguously(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.csv")
+	if err := os.WriteFile(path, []byte("\"a: 1, b\"\n2\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	program := fmt.Sprintf(`let a = {a: 1, b: 2}
+in let b = source(%q) |> reduce(null, fn(acc, row) => row)
+in [a == b, a, b]`, path)
+	var stdout, stderr bytes.Buffer
+	status := run([]string{writeProgram(t, program)}, &stdout, &stderr)
+	if status != 0 || stdout.String() != "[false, {a: 1, b: 2}, {\"a: 1, b\": 2}]\n" || stderr.Len() != 0 {
+		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+	}
+}
+
+func TestCLIReportsLocationsInFilesWithCRLineEndings(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	status := run([]string{writeProgram(t, "if true then\rmissing\relse 1")}, &stdout, &stderr)
+	if status != 1 || stdout.Len() != 0 || stderr.String() != "name error at 2:1: undefined identifier \"missing\"\n" {
+		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+	}
+}

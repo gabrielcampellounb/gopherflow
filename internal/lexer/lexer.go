@@ -35,7 +35,7 @@ func (l *Lexer) Next() (token.Token, error) {
 	}
 
 	ch := l.advance()
-	if isLetter(ch) {
+	if token.IsIdentifierStart(ch) {
 		lexeme := l.readIdentifier()
 		return token.Token{Type: token.LookupIdentifier(lexeme), Lexeme: lexeme, Position: start}, nil
 	}
@@ -131,7 +131,7 @@ func (l *Lexer) readIdentifier() string {
 	start := l.offset - 1
 	for !l.atEnd() {
 		ch := l.source[l.offset]
-		if !isLetter(ch) && !isDigit(ch) && ch != '_' {
+		if !token.IsIdentifierContinue(ch) {
 			break
 		}
 		l.advance()
@@ -151,10 +151,6 @@ func (l *Lexer) readNumber() string {
 		}
 	}
 	return l.source[start:l.offset]
-}
-
-func isLetter(ch byte) bool {
-	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'
 }
 
 func isDigit(ch byte) bool {
@@ -194,7 +190,7 @@ func (l *Lexer) readString(start token.Position) (string, error) {
 				return "", &Error{Position: escapePosition, Message: fmt.Sprintf("invalid escape \\%c", escaped)}
 			}
 			chunkStart = l.offset
-		case '\n':
+		case '\r', '\n':
 			return "", &Error{Position: start, Message: "unterminated string"}
 		}
 	}
@@ -208,10 +204,16 @@ func (l *Lexer) position() token.Position {
 func (l *Lexer) advance() byte {
 	ch := l.source[l.offset]
 	l.offset++
-	if ch == '\n' {
+	switch ch {
+	case '\r':
 		l.line++
 		l.column = 1
-	} else {
+	case '\n':
+		if l.offset == 1 || l.source[l.offset-2] != '\r' {
+			l.line++
+		}
+		l.column = 1
+	default:
 		l.column++
 	}
 	return ch

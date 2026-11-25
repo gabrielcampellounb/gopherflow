@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/gabrielcampellounb/gopherflow/internal/token"
 )
 
 // WriteValue writes the same representation as Inspect, traversing collections
@@ -63,7 +65,11 @@ func (w *valueWriter) write(value Value) {
 			if i > 0 {
 				w.text(", ")
 			}
-			w.text(name)
+			if token.IsIdentifier(name) {
+				w.text(name)
+			} else {
+				w.text(String(name).Inspect())
+			}
 			w.text(": ")
 			w.write(value[name])
 			if w.err != nil {

@@ -64,6 +64,27 @@ func LookupIdentifier(value string) TokenType {
 	return Identifier
 }
 
+func IsIdentifierStart(ch byte) bool {
+	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'
+}
+
+func IsIdentifierContinue(ch byte) bool {
+	return IsIdentifierStart(ch) || ch >= '0' && ch <= '9' || ch == '_'
+}
+
+// IsIdentifier reports whether value can be used as an unquoted identifier.
+func IsIdentifier(value string) bool {
+	if len(value) == 0 || !IsIdentifierStart(value[0]) {
+		return false
+	}
+	for i := 1; i < len(value); i++ {
+		if !IsIdentifierContinue(value[i]) {
+			return false
+		}
+	}
+	return LookupIdentifier(value) == Identifier
+}
+
 type Position struct {
 	Offset int
 	Line   int

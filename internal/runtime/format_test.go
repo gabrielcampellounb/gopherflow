@@ -56,3 +56,15 @@ func TestWriteValueStopsTraversingOnOutputError(t *testing.T) {
 		t.Fatalf("short write returned %v", err)
 	}
 }
+
+func TestRecordFormattingQuotesNonIdentifierKeys(t *testing.T) {
+	record := Record{
+		"": Number(0), "_name": Number(1), "a: 1, b": Number(2),
+		"name_2": Number(3), "true": Number(4), "á\r\n\"": Number(5),
+	}
+	const want = `{"": 0, "_name": 1, "a: 1, b": 2, name_2: 3, "true": 4, "á\r\n\"": 5}`
+	var output strings.Builder
+	if err := WriteValue(&output, record); err != nil || output.String() != want || record.Inspect() != want {
+		t.Fatalf("write=%q inspect=%q error=%v, want %q", output.String(), record.Inspect(), err, want)
+	}
+}

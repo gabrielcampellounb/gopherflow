@@ -198,8 +198,8 @@ digit =
 ```
 
 Dentro de strings, aspas e barras invertidas devem ser escapadas. Os escapes
-reconhecidos são `\"`, `\\`, `\n`, `\r` e `\t`. Uma quebra de linha literal
-encerra a leitura com erro.
+reconhecidos são `\"`, `\\`, `\n`, `\r` e `\t`. LF, CRLF e CR isolado contam como quebra de linha. Uma quebra de linha
+literal dentro de uma string encerra a leitura com erro.
 
 ### Palavras reservadas
 
@@ -342,6 +342,9 @@ consultar nomes de colunas CSV e chaves de `keyBy` que não são identificadores
 ```gopherflow
 record["air temperature"]
 ```
+
+Na saída do CLI, os nomes de campos que não são identificadores válidos
+aparecem entre aspas, com escapes quando necessário.
 
 Os campos são avaliados na ordem em que aparecem. Nomes repetidos são erros
 de sintaxe, e o acesso a um campo ausente produz um erro em tempo de execução.
