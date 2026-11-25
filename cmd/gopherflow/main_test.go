@@ -164,3 +164,23 @@ func TestCSVEmptyPipelinePreservesHeader(t *testing.T) {
 		})
 	}
 }
+
+type failedCollectionOutput struct {
+	maxChunk int
+}
+
+func (out *failedCollectionOutput) Write(p []byte) (int, error) {
+	out.maxChunk = max(out.maxChunk, len(p))
+	return 0, io.ErrClosedPipe
+}
+
+func TestCLIStopsWhenStreamingCollectionFails(t *testing.T) {
+	program := writeProgram(t, "def nest(n, x) = if n == 0 then x else nest(n - 1, [x, x]); nest(16, 0)")
+	stdout := &failedCollectionOutput{}
+	var stderr bytes.Buffer
+	status := run([]string{program}, stdout, &stderr)
+	if status != 1 || !strings.Contains(stderr.String(), io.ErrClosedPipe.Error()) ||
+		stdout.maxChunk == 0 || stdout.maxChunk >= 64*1024 {
+		t.Fatalf("status=%d first write size=%d stderr=%q", status, stdout.maxChunk, stderr.String())
+	}
+}

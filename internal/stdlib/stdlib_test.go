@@ -261,3 +261,31 @@ func TestCSVSinkRejectsNonRegularDestinations(t *testing.T) {
 		}
 	})
 }
+
+func TestCSVSinkQuotesFirstHeaderWithLeadingBOM(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		columns []string
+		row     runtime.Record
+	}{
+		{"one column", []string{"\ufeffname"}, runtime.Record{"\ufeffname": runtime.String("Alice")}},
+		{"multiple columns", []string{"\ufeffname", "value"}, runtime.Record{"\ufeffname": runtime.String("Alice"), "value": runtime.Number(7)}},
+		{"quotes and CRLF", []string{"\ufeffa\"b\r\nc", "value"}, runtime.Record{"\ufeffa\"b\r\nc": runtime.String("Alice"), "value": runtime.Number(7)}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "out.csv")
+			want := runtime.Stream{Columns: tt.columns, Values: []runtime.Value{tt.row}}
+			if _, err := sink([]runtime.Value{want, runtime.String(path)}); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil || !strings.HasPrefix(string(data), "\"\ufeff") {
+				t.Fatalf("first CSV field was not quoted: %q, %v", data, err)
+			}
+			got, err := source([]runtime.Value{runtime.String(path)})
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("CSV round-trip = %#v, %v, want %#v", got, err, want)
+			}
+		})
+	}
+}

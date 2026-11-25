@@ -1,14 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
-	"runtime"
+	goruntime "runtime"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/evaluator"
 	"github.com/gabrielcampellounb/gopherflow/internal/lexer"
 	"github.com/gabrielcampellounb/gopherflow/internal/parser"
+	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
 )
 
 func main() {
@@ -34,12 +36,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	value, err := evaluator.EvaluateConcurrent(program, runtime.GOMAXPROCS(0))
+	value, err := evaluator.EvaluateConcurrent(program, goruntime.GOMAXPROCS(0))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if _, err := fmt.Fprintln(stdout, value.Inspect()); err != nil {
+	output := bufio.NewWriter(stdout)
+	err = runtime.WriteValue(output, value)
+	if err == nil {
+		err = output.WriteByte('\n')
+	}
+	if err == nil {
+		err = output.Flush()
+	}
+	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}

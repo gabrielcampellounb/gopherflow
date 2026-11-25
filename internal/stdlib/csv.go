@@ -13,9 +13,12 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
 )
+
+const csvBOM = "\ufeff"
 
 var decimal = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
 
@@ -30,14 +33,13 @@ func source(args []runtime.Value) (runtime.Value, error) {
 	}
 	defer file.Close()
 	buffered := bufio.NewReader(file)
-	const bom = "\xef\xbb\xbf"
-	prefix, err := buffered.Peek(len(bom))
+	prefix, err := buffered.Peek(len(csvBOM))
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("source header: %w", err)
 	}
-	if string(prefix) == bom {
+	if string(prefix) == csvBOM {
 		// Peek guarantees these bytes are already buffered.
-		_, _ = buffered.Discard(len(bom))
+		_, _ = buffered.Discard(len(csvBOM))
 	}
 	reader := csv.NewReader(&quotedCRLFReader{source: buffered})
 	columns, err := reader.Read()
@@ -164,7 +166,7 @@ func writeCSV(path string, stream runtime.Stream) error {
 	defer file.Close()
 	writer := csv.NewWriter(file)
 	if len(columns) != 0 {
-		if err := writer.Write(columns); err != nil {
+		if err := writeCSVHeader(file, writer, columns); err != nil {
 			return err
 		}
 	}
@@ -228,4 +230,22 @@ func writeCSV(path string, stream runtime.Stream) error {
 		return err
 	}
 	return os.Rename(file.Name(), path)
+}
+
+// A leading U+FEFF is data when it occurs inside the first quoted field.
+// encoding/csv would otherwise leave names with this prefix unquoted.
+func writeCSVHeader(output io.Writer, csvWriter *csv.Writer, columns []string) error {
+	if !strings.HasPrefix(columns[0], csvBOM) {
+		return csvWriter.Write(columns)
+	}
+
+	first := `"` + strings.ReplaceAll(columns[0], `"`, `""`) + `"`
+	if len(columns) == 1 {
+		_, err := io.WriteString(output, first+"\n")
+		return err
+	}
+	if _, err := io.WriteString(output, first+","); err != nil {
+		return err
+	}
+	return csvWriter.Write(columns[1:])
 }

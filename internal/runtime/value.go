@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -75,30 +74,13 @@ func (Null) Inspect() string { return "null" }
 
 type List []Value
 
-func (List) Type() Type { return ListType }
-func (l List) Inspect() string {
-	parts := make([]string, len(l))
-	for i, value := range l {
-		parts[i] = value.Inspect()
-	}
-	return "[" + strings.Join(parts, ", ") + "]"
-}
+func (List) Type() Type        { return ListType }
+func (l List) Inspect() string { return inspectCollection(l) }
 
 type Record map[string]Value
 
-func (Record) Type() Type { return RecordType }
-func (r Record) Inspect() string {
-	keys := make([]string, 0, len(r))
-	for key := range r {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	parts := make([]string, len(keys))
-	for i, key := range keys {
-		parts[i] = fmt.Sprintf("%s: %s", key, r[key].Inspect())
-	}
-	return "{" + strings.Join(parts, ", ") + "}"
-}
+func (Record) Type() Type        { return RecordType }
+func (r Record) Inspect() string { return inspectCollection(r) }
 
 type Function struct {
 	Parameters    []string
