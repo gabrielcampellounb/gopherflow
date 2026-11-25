@@ -10,6 +10,7 @@ import (
 
 type execution struct {
 	workerLimit int
+	callDepth   int
 	pool        *workerPool
 }
 

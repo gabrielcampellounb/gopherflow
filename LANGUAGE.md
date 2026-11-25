@@ -306,7 +306,13 @@ Definições nomeadas:
 def square(x) = x * x;
 ```
 
-Definições de topo podem ser recursivas.
+Definições de topo podem ser recursivas. O interpretador aceita até 1024
+chamadas de função ativas, incluindo callbacks de dataflow. A próxima
+chamada produz um erro de execução.
+
+A igualdade entre funções compara a identidade do valor. Uma função
+comparada com uma referência à mesma função é igual a si própria. Duas
+closures criadas em avaliações distintas têm identidades distintas.
 
 ### Records
 

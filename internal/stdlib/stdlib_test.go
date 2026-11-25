@@ -11,21 +11,21 @@ import (
 )
 
 func TestStandardBindings(t *testing.T) {
-	env := Environment(nil)
+	env := Environment()
 	if len(*env) != 9 {
 		t.Fatalf("unexpected environment: %v", env)
 	}
 	for _, name := range []string{"source", "map", "filter", "flatMap", "take", "keyBy", "reduce", "forEach", "sink"} {
 		builtin, ok := (*env)[name].(runtime.Builtin)
-		if !ok || builtin.Name != name || builtin.Call == nil {
+		if !ok || builtin.Name != name || builtin.CallWith == nil {
 			t.Fatalf("invalid builtin %q: %#v", name, (*env)[name])
 		}
-		if result, err := builtin.Call(nil); result != nil || err == nil {
+		if result, err := builtin.Invoke(nil, nil); result != nil || err == nil {
 			t.Fatalf("%s accepted zero arguments: %v, %v", name, result, err)
 		}
 	}
 	delete(*env, "map")
-	if _, ok := (*Environment(nil))["map"]; !ok {
+	if _, ok := (*Environment())["map"]; !ok {
 		t.Fatal("environments share mutable bindings")
 	}
 }

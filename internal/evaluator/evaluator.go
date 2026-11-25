@@ -17,9 +17,7 @@ func Evaluate(program *ast.Program) (runtime.Value, error) {
 
 func standardEnvironment() *runtime.Environment {
 	environment := runtime.NewEnvironment(nil)
-	// Standard bindings may outlive this evaluation through returned closures.
-	// Their callbacks use a sequential evaluator without a worker pool.
-	for name, value := range *stdlib.Environment((&execution{}).invokeFunction) {
+	for name, value := range *stdlib.Environment() {
 		environment.Set(name, value)
 	}
 	return environment
@@ -41,12 +39,7 @@ func (exec *execution) evaluateProgram(program *ast.Program, environment *runtim
 			for i, parameter := range definition.Parameters {
 				names[i] = parameter.Name
 			}
-			scope.Set(definition.Name.Name, runtime.Function{
-				Parameters:    names,
-				Body:          definition.Body,
-				OptimizedBody: definition.OptimizedBody,
-				Env:           scope,
-			})
+			scope.Set(definition.Name.Name, runtime.NewFunction(names, definition.Body, definition.OptimizedBody, scope))
 		}
 	}
 	return exec.evaluateExpression(program.Expressions[0], scope)
@@ -105,12 +98,7 @@ func (exec *execution) evaluateExpression(expression ast.Expression, environment
 		for i, parameter := range node.Parameters {
 			parameters[i] = parameter.Name
 		}
-		return runtime.Function{
-			Parameters:    parameters,
-			Body:          node.Body,
-			OptimizedBody: node.OptimizedBody,
-			Env:           environment,
-		}, nil
+		return runtime.NewFunction(parameters, node.Body, node.OptimizedBody, environment), nil
 	case *ast.CallExpression:
 		return exec.evaluateCall(node, environment)
 	case *ast.ListLiteral:
@@ -201,16 +189,11 @@ func (exec *execution) evaluateCall(call *ast.CallExpression, environment *runti
 	position := call.Pos
 	switch function := callee.(type) {
 	case runtime.Function:
-		if len(arguments) != len(function.Parameters) {
-			return nil, fmt.Errorf("arity error at %d:%d: function expects %d arguments, got %d",
-				position.Line, position.Column, len(function.Parameters), len(arguments))
-		}
-		return exec.invokeFunction(function, arguments)
+		return exec.invokeFunction(function, arguments, position)
 	case runtime.Builtin:
-		if function.Call == nil {
-			return nil, fmt.Errorf("runtime error at %d:%d: builtin %q has no implementation", position.Line, position.Column, function.Name)
-		}
-		value, err := function.Call(arguments)
+		value, err := function.Invoke(arguments, func(callback runtime.Function, args []runtime.Value) (runtime.Value, error) {
+			return exec.invokeFunction(callback, args, position)
+		})
 		if err != nil {
 			return nil, fmt.Errorf("runtime error at %d:%d: %w", position.Line, position.Column, err)
 		}
@@ -221,7 +204,20 @@ func (exec *execution) evaluateCall(call *ast.CallExpression, environment *runti
 	}
 }
 
-func (exec *execution) invokeFunction(function runtime.Function, arguments []runtime.Value) (runtime.Value, error) {
+const maxFunctionCallDepth = 1024
+
+func (exec *execution) invokeFunction(function runtime.Function, arguments []runtime.Value, position token.Position) (runtime.Value, error) {
+	if len(arguments) != len(function.Parameters) {
+		return nil, fmt.Errorf("arity error at %d:%d: function expects %d arguments, got %d",
+			position.Line, position.Column, len(function.Parameters), len(arguments))
+	}
+	if exec.callDepth >= maxFunctionCallDepth {
+		return nil, fmt.Errorf("runtime error at %d:%d: maximum function call depth (%d) exceeded",
+			position.Line, position.Column, maxFunctionCallDepth)
+	}
+	exec.callDepth++
+	defer func() { exec.callDepth-- }()
+
 	scope := runtime.NewEnvironment(function.Env)
 	for i, name := range function.Parameters {
 		scope.Set(name, arguments[i])

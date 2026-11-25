@@ -104,6 +104,13 @@ type Function struct {
 	Body          ast.Expression
 	OptimizedBody ast.Expression // Optional execution body, invisible to Inspect.
 	Env           *Environment
+	identity      *byte
+}
+
+func NewFunction(parameters []string, body, optimizedBody ast.Expression, env *Environment) Function {
+	return Function{
+		Parameters: parameters, Body: body, OptimizedBody: optimizedBody, Env: env, identity: new(byte),
+	}
 }
 
 func (Function) Type() Type { return FunctionType }
@@ -115,9 +122,22 @@ func (f Function) Inspect() string {
 	return fmt.Sprintf("fn(%s) => %s", strings.Join(f.Parameters, ", "), body)
 }
 
+type FunctionInvoker func(Function, []Value) (Value, error)
+
 type Builtin struct {
-	Name string
-	Call func([]Value) (Value, error)
+	Name     string
+	Call     func([]Value) (Value, error)
+	CallWith func([]Value, FunctionInvoker) (Value, error)
+}
+
+func (b Builtin) Invoke(args []Value, invoke FunctionInvoker) (Value, error) {
+	if b.CallWith != nil {
+		return b.CallWith(args, invoke)
+	}
+	if b.Call != nil {
+		return b.Call(args)
+	}
+	return nil, fmt.Errorf("builtin %q has no implementation", b.Name)
 }
 
 func (Builtin) Type() Type        { return BuiltinType }

@@ -323,3 +323,65 @@ func TestIndexErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestFunctionsCompareByIdentity(t *testing.T) {
+	for _, tt := range []struct {
+		source string
+		want   runtime.Bool
+	}{
+		{`def make(x) = fn() => x; make(1) == make(2)`, false},
+		{`def make(x) = fn() => x; make(1) == make(1)`, false},
+		{`let f = fn() => 1 + 2 in let alias = f in {a: [f]} == {a: [alias]}`, true},
+		{`def f() = 1 + 2; f == f`, true},
+		{`(fn() => 1) != (fn() => 1)`, true},
+	} {
+		program := parallelTestProgram(t, tt.source)
+		for _, workers := range []int{1, 4} {
+			actual, err := EvaluateConcurrent(program, workers)
+			if err != nil || actual != tt.want {
+				t.Errorf("%q: workers=%d got %v, %v, want %t", tt.source, workers, actual, err, tt.want)
+			}
+		}
+	}
+}
+
+func TestFunctionCallDepthAcrossDataflowCallbacks(t *testing.T) {
+	for _, source := range []string{
+		"def loop(x) = loop(x); loop(0)",
+		"def first(x) = second(x); def second(x) = first(x); first(0)",
+		"def loop(x) = [x] |> forEach(loop); loop(0)",
+	} {
+		t.Run(source, func(t *testing.T) {
+			program := parallelTestProgram(t, source)
+			value, err := EvaluateConcurrent(program, 4)
+			if value != nil || err == nil || !strings.Contains(err.Error(), "maximum function call depth (1024) exceeded") {
+				t.Fatalf("got %v, %v", value, err)
+			}
+		})
+	}
+	program := parallelTestProgram(t, "def step(x) = if x <= 0 then 42 else [x - 1] |> reduce(0, fn(acc, n) => step(n)); step(50)")
+	value, err := EvaluateConcurrent(program, 4)
+	if err != nil || value != runtime.Number(42) {
+		t.Fatalf("finite recursion: got %v, %v", value, err)
+	}
+}
+
+func TestEscapedClosuresUseCurrentExecution(t *testing.T) {
+	factory := parallelTestProgram(t, "fn(n) => [n] |> reduce(0, fn(sum, x) => sum + x)")
+	closure, err := EvaluateConcurrent(factory, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment := runtime.NewEnvironment(nil)
+	environment.Set("f", closure)
+	program := Optimize(parallelTestProgram(t, "f(42)"))
+	for range 8 {
+		t.Run("independent evaluation", func(t *testing.T) {
+			t.Parallel()
+			value, err := EvaluateIn(program, environment)
+			if err != nil || value != runtime.Number(42) {
+				t.Fatalf("got %v, %v", value, err)
+			}
+		})
+	}
+}

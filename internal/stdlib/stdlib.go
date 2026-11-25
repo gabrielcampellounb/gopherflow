@@ -7,28 +7,32 @@ import (
 	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
 )
 
-// Environment builds the standard bindings. invoke runs a user function after
-// the library has validated its arity.
-func Environment(invoke func(runtime.Function, []runtime.Value) (runtime.Value, error)) *runtime.Record {
+// Environment builds standard bindings without retaining an evaluator's call state.
+func Environment() *runtime.Record {
 	bindings := make(runtime.Record)
-	register := func(name string, arity int, call func([]runtime.Value) (runtime.Value, error)) {
-		bindings[name] = runtime.Builtin{Name: name, Call: func(args []runtime.Value) (runtime.Value, error) {
+	register := func(name string, arity int, call func([]runtime.Value, runtime.FunctionInvoker) (runtime.Value, error)) {
+		bindings[name] = runtime.Builtin{Name: name, CallWith: func(args []runtime.Value, invoke runtime.FunctionInvoker) (runtime.Value, error) {
 			if len(args) != arity {
 				return nil, fmt.Errorf("%s expects %d arguments, got %d", name, arity, len(args))
 			}
-			return call(args)
+			return call(args, invoke)
 		}}
 	}
+	registerSimple := func(name string, arity int, call func([]runtime.Value) (runtime.Value, error)) {
+		register(name, arity, func(args []runtime.Value, _ runtime.FunctionInvoker) (runtime.Value, error) {
+			return call(args)
+		})
+	}
 
-	register("source", 1, source)
-	register("sink", 2, sink)
-	register("take", 2, take)
+	registerSimple("source", 1, source)
+	registerSimple("sink", 2, sink)
+	registerSimple("take", 2, take)
 	for _, name := range []string{"map", "filter", "flatMap", "keyBy", "reduce", "forEach"} {
 		arity, callbackArity := 2, 1
 		if name == "reduce" {
 			arity, callbackArity = 3, 2
 		}
-		register(name, arity, func(args []runtime.Value) (runtime.Value, error) {
+		register(name, arity, func(args []runtime.Value, invoke runtime.FunctionInvoker) (runtime.Value, error) {
 			stream, ok := asStream(args[0])
 			if !ok {
 				return nil, fmt.Errorf("%s expects a List or Stream", name)
@@ -54,16 +58,19 @@ func asStream(value runtime.Value) (runtime.Stream, bool) {
 	}
 }
 
-func prepareCallback(value runtime.Value, arity int, invoke func(runtime.Function, []runtime.Value) (runtime.Value, error)) (func([]runtime.Value) (runtime.Value, error), error) {
+func prepareCallback(value runtime.Value, arity int, invoke runtime.FunctionInvoker) (func([]runtime.Value) (runtime.Value, error), error) {
 	switch function := value.(type) {
 	case runtime.Function:
 		if len(function.Parameters) != arity {
 			return nil, fmt.Errorf("callback must accept %d arguments, got %d", arity, len(function.Parameters))
 		}
+		if invoke == nil {
+			return nil, fmt.Errorf("no evaluator available for function callback")
+		}
 		return func(args []runtime.Value) (runtime.Value, error) { return invoke(function, args) }, nil
 	case runtime.Builtin:
-		if function.Call != nil {
-			return function.Call, nil
+		if function.Call != nil || function.CallWith != nil {
+			return func(args []runtime.Value) (runtime.Value, error) { return function.Invoke(args, invoke) }, nil
 		}
 	}
 	return nil, fmt.Errorf("expected a callable callback")

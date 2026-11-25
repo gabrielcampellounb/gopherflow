@@ -6,7 +6,8 @@ import (
 )
 
 // Equal compares language values. Collections compare their contents.
-// Functions and host-provided values retain their existing inspection-based comparison.
+// Interpreter-created functions compare by identity. Host-provided values may
+// still use their inspection representation.
 func Equal(left, right Value) bool {
 	switch left := left.(type) {
 	case Number:
@@ -42,6 +43,10 @@ func Equal(left, right Value) bool {
 				}
 			}
 			return true
+		}
+	case Function:
+		if right, ok := right.(Function); ok && (left.identity != nil || right.identity != nil) {
+			return left.identity == right.identity
 		}
 	case Stream:
 		if right, ok := right.(Stream); ok {

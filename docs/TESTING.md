@@ -35,7 +35,8 @@ oferecem avaliação sequencial.
 Listas e records com trabalho suficiente podem distribuir seus elementos ou
 campos entre workers, desde que todos sejam expressões puras que só dependam
 de bindings internos ao próprio item. Chamadas, callbacks de dataflow e
-acessos a bindings externos seguem a ordem sequencial. Os resultados dos
+acessos a bindings externos seguem a ordem sequencial. Dentro de um callback,
+lotes puros podem usar o pool da avaliação em andamento. Os resultados dos
 workers são recolhidos pela posição original, inclusive quando mais de um
 item falha. Os testes verificam a execução simultânea, o limite do pool,
 a ordem dos resultados e erros e a ordem dos efeitos.
