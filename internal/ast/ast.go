@@ -74,10 +74,11 @@ func (i *IndexExpression) String() string {
 func (i *IndexExpression) Position() token.Position { return i.Pos }
 
 type Definition struct {
-	Name       *Identifier
-	Parameters []*Identifier
-	Body       Expression
-	Pos        token.Position
+	Name          *Identifier
+	Parameters    []*Identifier
+	Body          Expression
+	OptimizedBody Expression // Optional execution body, invisible to String.
+	Pos           token.Position
 }
 
 func (d *Definition) String() string {
@@ -105,9 +106,10 @@ func (c *CallExpression) String() string {
 func (c *CallExpression) Position() token.Position { return c.Pos }
 
 type FunctionLiteral struct {
-	Token      token.Token
-	Parameters []*Identifier
-	Body       Expression
+	Token         token.Token
+	Parameters    []*Identifier
+	Body          Expression
+	OptimizedBody Expression // Optional execution body, invisible to String.
 }
 
 func (f *FunctionLiteral) expressionNode() {}
@@ -139,6 +141,9 @@ func (l *Literal) expressionNode() {}
 func (l *Literal) String() string {
 	if l.Kind == token.String {
 		return quoteString(l.Value)
+	}
+	if l.Kind == token.Number && strings.HasPrefix(l.Value, "-") {
+		return "(" + l.Value + ")"
 	}
 	return l.Value
 }

@@ -159,7 +159,7 @@ func TestEvaluateInvalidAST(t *testing.T) {
 }
 
 func TestConcurrentIndependentEvaluation(t *testing.T) {
-	p, err := parser.Parse(lexer.New("let x = 6 in let y = x * 7 in y"))
+	p, err := parser.Parse(lexer.New("let x = 2 * 3 in let y = x * (8 - 1) in y"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestConcurrentIndependentEvaluation(t *testing.T) {
 		t.Run("isolated", func(t *testing.T) {
 			t.Parallel()
 			for range 50 {
-				got, err := Evaluate(p)
+				got, err := Evaluate(Optimize(p))
 				if err != nil || got != runtime.Number(42) {
 					t.Fatalf("got %v, %v", got, err)
 				}
@@ -203,7 +203,7 @@ func FuzzArithmetic(f *testing.F) {
 }
 
 func FuzzEvaluation(f *testing.F) {
-	for _, s := range []string{"1 + 2", "missing", "let x = 1 in x", `"\n"`, "1 / 0", "true and false"} {
+	for _, s := range []string{"1 + 2", "missing", "let x = 1 in x", `"\n"`, "1 / 0", "true and false", "if true then 3 * 2 else missing", "[1 + 2][0]", "(fn(x) => x + (3 * 2))(1)", "def f() = 1 + 2; f"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
@@ -215,18 +215,22 @@ func FuzzEvaluation(f *testing.F) {
 			return
 		}
 		a, firstErr := Evaluate(p)
-		b, secondErr := Evaluate(p)
+		optimized := Optimize(p)
+		if Optimize(optimized) != optimized {
+			t.Fatal("optimization did not reach a fixed point")
+		}
+		b, secondErr := Evaluate(optimized)
 		if (firstErr == nil) != (secondErr == nil) {
-			t.Fatal("nondeterministic error")
+			t.Fatalf("optimization changed error from %v to %v", firstErr, secondErr)
 		}
 		if firstErr != nil {
 			if a != nil || b != nil || firstErr.Error() != secondErr.Error() {
-				t.Fatal("inconsistent failure")
+				t.Fatalf("optimization changed failure from %v to %v", firstErr, secondErr)
 			}
 			return
 		}
 		if a == nil || b == nil || a.Type() != b.Type() || a.Inspect() != b.Inspect() {
-			t.Fatal("inconsistent result")
+			t.Fatalf("optimization changed result from %v to %v", a, b)
 		}
 	})
 }

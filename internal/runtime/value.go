@@ -100,9 +100,10 @@ func (r Record) Inspect() string {
 }
 
 type Function struct {
-	Parameters []string
-	Body       ast.Expression
-	Env        *Environment
+	Parameters    []string
+	Body          ast.Expression
+	OptimizedBody ast.Expression // Optional execution body, invisible to Inspect.
+	Env           *Environment
 }
 
 func (Function) Type() Type { return FunctionType }

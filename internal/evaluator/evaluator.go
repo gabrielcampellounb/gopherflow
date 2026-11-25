@@ -27,9 +27,10 @@ func EvaluateIn(program *ast.Program, environment *runtime.Environment) (runtime
 				names[i] = parameter.Name
 			}
 			scope.Set(definition.Name.Name, runtime.Function{
-				Parameters: names,
-				Body:       definition.Body,
-				Env:        scope,
+				Parameters:    names,
+				Body:          definition.Body,
+				OptimizedBody: definition.OptimizedBody,
+				Env:           scope,
 			})
 		}
 	}
@@ -87,9 +88,10 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 			parameters[i] = parameter.Name
 		}
 		return runtime.Function{
-			Parameters: parameters,
-			Body:       node.Body,
-			Env:        environment,
+			Parameters:    parameters,
+			Body:          node.Body,
+			OptimizedBody: node.OptimizedBody,
+			Env:           environment,
 		}, nil
 	case *ast.CallExpression:
 		return evaluateCall(node, environment)
@@ -133,8 +135,10 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 		for i, name := range function.Parameters {
 			scope.Set(name, arguments[i])
 		}
+		if function.OptimizedBody != nil {
+			return evaluateExpression(function.OptimizedBody, scope)
+		}
 		return evaluateExpression(function.Body, scope)
-	//case runtime.Builtin:
 	default:
 		return nil, fmt.Errorf("type error at %d:%d: %s is not callable",
 			position.Line, position.Column, callee.Type())

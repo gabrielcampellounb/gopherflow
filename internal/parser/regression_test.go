@@ -153,7 +153,7 @@ func TestInvalidAndUnimplementedSyntax(t *testing.T) {
 }
 
 func TestProgramStringRoundTrip(t *testing.T) {
-	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1", "-5", "--5", "-(3 + 2)", "2 * -3", "not true", "not not false", "not (1 < 2)", "if true then 1 else 2", "if false then if true then 1 else 2 else 3", "(if true then 1 else 2) + 3", "not (if false then true else false)", "-(if true then 1 else 2)"} {
+	for _, source := range []string{"\"\x00\a\b\f\v\xff\"", `"a\n\"\\"`, "1 + 2 * 3", "let x = 1 in x + 2", "(let x = 1 in x) + 2", "2 * (let x = 3 in x) + 1", "-5", "--5", "-(3 + 2)", "2 * -3", "not true", "not not false", "not (1 < 2)", "if true then 1 else 2", "if false then if true then 1 else 2 else 3", "(if true then 1 else 2) + 3", "not (if false then true else false)", "-(if true then 1 else 2)", "-(let x = 1 in x)", "(if true then fn(x) => x else null)(3)", "(if true then [3] else [4])[0]", "not (fn() => true)"} {
 		p, err := Parse(lexer.New(source))
 		if err != nil {
 			t.Fatal(err)

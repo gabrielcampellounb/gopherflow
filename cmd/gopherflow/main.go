@@ -25,7 +25,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	value, err := evaluator.Evaluate(program)
+	value, err := evaluator.Evaluate(evaluator.Optimize(program))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
