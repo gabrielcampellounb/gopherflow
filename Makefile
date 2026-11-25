@@ -8,21 +8,21 @@ STATICCHECK := $(TOOLS_DIR)/staticcheck
 
 help:
 	@printf '%s\n' \
-		'help          Show available targets' \
-		'tools         Install local analysis tools' \
-		'build         Build the CLI' \
-		'run           Run the CLI' \
-		'test          Run unit tests' \
-		'race          Run tests with the race detector' \
-		'fmt           Format Go files' \
-		'fmt-check     Check Go formatting' \
-		'vet           Run go vet' \
-		'staticcheck   Run staticcheck' \
-		'lint          Run formatting and static analysis' \
-		'coverage      Generate coverage summary' \
-		'coverage-html Generate HTML coverage report' \
-		'check         Run lint, tests, and race tests' \
-		'clean         Remove generated artifacts'
+		'help          Lista os alvos disponíveis' \
+		'tools         Instala as ferramentas de análise locais' \
+		'build         Compila o programa de linha de comando' \
+		'run           Executa o programa de linha de comando' \
+		'test          Executa os testes unitários' \
+		'race          Executa os testes com o detector de corrida' \
+		'fmt           Formata os arquivos Go' \
+		'fmt-check     Verifica a formatação dos arquivos Go' \
+		'vet           Executa o go vet' \
+		'staticcheck   Executa o staticcheck' \
+		'lint          Verifica a formatação e a análise estática' \
+		'coverage      Gera o resumo de cobertura' \
+		'coverage-html Gera o relatório HTML de cobertura' \
+		'check         Executa todas as verificações' \
+		'clean         Remove os artefatos gerados'
 
 tools:
 	mkdir -p $(TOOLS_DIR)

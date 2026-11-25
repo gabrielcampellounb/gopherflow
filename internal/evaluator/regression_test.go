@@ -181,7 +181,7 @@ func FuzzArithmetic(f *testing.F) {
 	f.Add(int32(-7), int32(3))
 	f.Add(int32(42), int32(0))
 	f.Fuzz(func(t *testing.T, a, b int32) {
-		// Encode signed numbers using implemented subtraction rather than unary minus.
+		// Representa números com sinal pela subtração já implementada, sem usar menos unário.
 		left, right := int64(a), int64(b)
 		source := fmt.Sprintf("(%d - %d)", max(left, 0), max(-left, 0))
 		other := fmt.Sprintf("(%d - %d)", max(right, 0), max(-right, 0))
@@ -232,8 +232,8 @@ func FuzzEvaluation(f *testing.F) {
 }
 
 func TestNaNIsNotEqualToItself(t *testing.T) {
-	// Overflow is possible using existing multiplication; IEEE-754 NaN must not
-	// become equal to itself merely because both values render as "NaN".
+	// A multiplicação pode gerar overflow; um NaN IEEE-754 não deve ser igual a si
+	// mesmo apenas porque os dois valores são exibidos como "NaN".
 	huge := "1" + strings.Repeat("0", 308)
 	source := "let x = " + huge + " * " + huge + " in (x / x) == (x / x)"
 	if got := evaluate(t, source); got != runtime.Bool(false) {

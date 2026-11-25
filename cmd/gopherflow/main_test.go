@@ -29,7 +29,7 @@ func TestCLI(t *testing.T) {
 	}
 }
 
-// Exercise the actual entry point and process status, including os.Exit.
+// Verifica o ponto de entrada real e o código de saída, incluindo os.Exit.
 func TestCLIProcess(t *testing.T) {
 	if os.Getenv("GOPHERFLOW_TEST_PROCESS") == "1" {
 		os.Args = append([]string{"gopherflow"}, os.Args[3:]...)

@@ -2,19 +2,23 @@
 
 ## Visão geral
 
-**GopherFlow** é uma linguagem funcional, dinamicamente tipada e orientada a pipelines de processamento de dados.
+**GopherFlow** é uma linguagem funcional, dinamicamente tipada e orientada a
+fluxos de processamento de dados.
+
+Esta especificação descreve a direção planejada da linguagem. Consulte o
+[`README.md`](./README.md) para saber quais recursos já estão implementados.
 
 Características principais:
 
 - funções de primeira classe;
-- closures léxicas;
-- bindings imutáveis;
+- fechamentos léxicos;
+- vínculos imutáveis;
 - recursão;
-- listas e records;
+- listas e registros;
 - condicionais como expressões;
 - tipagem dinâmica;
-- composição por pipeline com `|>`;
-- operações de dataflow fornecidas pela biblioteca padrão.
+- composição de fluxos com `|>`;
+- operações de fluxo de dados fornecidas pela biblioteca padrão.
 
 Operações como `source`, `map`, `filter`, `reduce` e `sink` **não são palavras reservadas**. Elas são funções disponíveis no ambiente padrão da linguagem.
 
@@ -257,7 +261,8 @@ Não existem anotações estáticas de tipo na sintaxe.
 fn(x) => x + 1
 ```
 
-Os valores possuem tipo em tempo de execução. Operações inválidas produzem erro de runtime.
+Os valores possuem tipo em tempo de execução. Operações inválidas produzem erro
+de tipo.
 
 Exemplo:
 
@@ -265,11 +270,12 @@ Exemplo:
 1 + "abc"
 ```
 
-deve produzir `TypeError`.
+deve produzir um erro de tipo.
 
 ### Imutabilidade
 
-Bindings introduzidos por `let`, parâmetros de função e definições de topo são imutáveis.
+Vínculos introduzidos por `let`, parâmetros de função e definições de topo são
+imutáveis.
 
 ```gopherflow
 let x = 10 in x + 1
@@ -293,7 +299,7 @@ def square(x) = x * x;
 
 Definições de topo podem ser recursivas.
 
-### Records
+### Registros
 
 ```gopherflow
 {
@@ -322,7 +328,7 @@ xs[0]
 
 ---
 
-## Biblioteca padrão de dataflow
+## Biblioteca padrão para fluxo de dados
 
 A biblioteca padrão deverá fornecer, inicialmente:
 
@@ -338,7 +344,8 @@ forEach
 sink
 ```
 
-Esses nomes são bindings comuns do ambiente padrão, não construções especiais do parser.
+Esses nomes são vínculos comuns do ambiente padrão, não construções especiais do
+analisador sintático.
 
 ---
 
@@ -357,4 +364,6 @@ source("data.csv")
 |> sink("result.csv");
 ```
 
-A implementação poderá transformar internamente o pipeline em estágios concorrentes conectados por channels do Go, sem expor detalhes de concorrência na sintaxe da linguagem.
+A implementação poderá transformar internamente o fluxo em estágios concorrentes
+conectados por canais do Go, sem expor detalhes de concorrência na sintaxe da
+linguagem.

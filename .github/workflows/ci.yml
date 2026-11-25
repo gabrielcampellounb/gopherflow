@@ -1,4 +1,4 @@
-name: CI
+name: Integração contínua
 
 on:
   push:

@@ -1,1 +1,1 @@
-let greeting = "hello" in greeting;
+let saudacao = "Olá, mundo" in saudacao;

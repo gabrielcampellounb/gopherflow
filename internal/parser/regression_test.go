@@ -173,7 +173,7 @@ func FuzzParser(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		// Bound recursive grammar depth and test throughput; arbitrary bytes remain valid inputs.
+		// Limita a profundidade da gramática e o custo do teste sem restringir os bytes de entrada.
 		if len(s) > 4096 {
 			t.Skip()
 		}

@@ -9,25 +9,28 @@ make coverage
 ```
 
 `make check` verifica formatação, vet, staticcheck, testes e detector de corridas.
-Os testes de processo também verificam stdout, stderr e códigos de saída do CLI.
+Os testes de processo também verificam a saída padrão, a saída de erros e os
+códigos de saída do programa de linha de comando.
 A cobertura mede caminhos executados, não prova correção. Os caminhos de erro do
-CLI que analisam a constante `null` não são artificialmente ativados por mocks.
+programa que analisam a constante `null` não são artificialmente ativados por
+simulações.
 
 A suíte cobre tokens e posições, escapes existentes, limites numéricos,
 precedência e associatividade, estrutura e reconstrução da AST, aritmética,
-igualdade, erros e ordem de avaliação, isolamento de bindings e representação
+igualdade, erros e ordem de avaliação, isolamento de vínculos e representação
 determinística dos valores. Avaliações independentes compartilham uma AST em um
 teste paralelo; isso não implica que um Environment mutável possa ser escrito
 simultaneamente por várias goroutines.
 
 Os testes distinguem as camadas: reconhecer ou analisar um operador não implica
-que o evaluator já o execute. Operadores sem implementação devem retornar erro.
-As funções da stdlib continuam sendo placeholders explícitos, e o CLI continua
-sem executar arquivos. A suíte não implementa os recursos futuros de LANGUAGE.md.
+que o avaliador já o execute. Operadores sem implementação devem retornar erro.
+As funções da biblioteca padrão continuam sendo marcadores explícitos, e o
+programa de linha de comando continua sem executar arquivos. A suíte não
+implementa os recursos futuros de `LANGUAGE.md`.
 
-## Fuzzing
+## Testes de fuzzing
 
-Os seeds e os casos de regressão em `testdata/fuzz` rodam com `go test ./...`.
+As sementes e os casos de regressão em `testdata/fuzz` rodam com `go test ./...`.
 Para explorar novos casos, execute cada alvo separadamente:
 
 ```sh
@@ -40,7 +43,7 @@ go test ./internal/evaluator -run='^$' -fuzz='^FuzzEvaluation$' -fuzztime=30s
 As propriedades verificam progresso e EOF estável, reconstrução da AST,
 aritmética contra operações nativas de Go e avaliação determinística sem pânico.
 Entradas recursivas são limitadas em tamanho para manter as campanhas práticas.
-Fuzzing por tempo limitado não esgota todas as entradas possíveis.
+Testes de fuzzing por tempo limitado não esgotam todas as entradas possíveis.
 
 ## Desempenho
 
@@ -48,6 +51,6 @@ Fuzzing por tempo limitado não esgota todas as entradas possíveis.
 go test ./internal/lexer ./internal/evaluator -run='^$' -bench=. -benchmem
 ```
 
-Os benchmarks medem tokenização e avaliação de uma AST já analisada. Compare
-revisões na mesma máquina, com múltiplas amostras; não use limites de tempo fixos
-como testes de correção.
+Os testes de desempenho medem a tokenização e a avaliação de uma AST já
+analisada. Compare revisões na mesma máquina, com múltiplas amostras; não use
+limites de tempo fixos como testes de correção.

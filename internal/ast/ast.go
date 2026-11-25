@@ -88,7 +88,7 @@ func (b *BinaryExpression) String() string {
 	return "(" + operandString(b.Left) + " " + b.Operator.Lexeme + " " + operandString(b.Right) + ")"
 }
 
-// Preserve grouping of let and if expressions used as binary operands.
+// Preserva o agrupamento de expressões let e if usadas como operandos binários.
 func operandString(expression Expression) string {
 	if _, ok := expression.(*LetExpression); ok {
 		return "(" + expression.String() + ")"
@@ -127,8 +127,8 @@ func (i *IfExpression) String() string {
 }
 func (i *IfExpression) Position() token.Position { return i.Pos }
 
-// quoteString uses only escapes accepted by the lexer, preserving other bytes.
-// Go's strconv.Quote also emits escapes such as \xNN that GopherFlow does not support.
+// Usa apenas escapes aceitos pelo lexer e preserva os demais bytes.
+// strconv.Quote também geraria escapes como \xNN, que o GopherFlow não aceita.
 func quoteString(value string) string {
 	var out strings.Builder
 	out.Grow(len(value) + 2)
