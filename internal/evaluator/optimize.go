@@ -92,9 +92,9 @@ func optimizeExpression(expression ast.Expression) ast.Expression {
 		if condition, ok := next.Condition.(*ast.Literal); ok {
 			switch condition.Kind {
 			case token.True:
-				return node.Consequence
+				return optimizeExpression(node.Consequence)
 			case token.False:
-				return node.Alternative
+				return optimizeExpression(node.Alternative)
 			}
 		}
 		next.Consequence = optimizeExpression(node.Consequence)

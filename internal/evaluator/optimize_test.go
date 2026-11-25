@@ -43,6 +43,19 @@ func TestOptimizeFixedPoint(t *testing.T) {
 	}
 }
 
+func TestOptimizeNestedSelectedBranchesInOnePass(t *testing.T) {
+	const depth = 128
+	source := strings.Repeat("if true then ", depth) + "1 + 2" + strings.Repeat(" else missing()", depth)
+	program, err := parser.Parse(lexer.New("[" + source + ", 4 * 5]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expression := optimizeExpression(program.Expressions[0])
+	if got, want := expression.String(), "[3, 20]"; got != want {
+		t.Fatalf("one pass produced %q, want %q", got, want)
+	}
+}
+
 func TestOptimizePreservesEvaluation(t *testing.T) {
 	huge := "1" + strings.Repeat("0", 308)
 	for _, tt := range []struct{ source, want string }{
