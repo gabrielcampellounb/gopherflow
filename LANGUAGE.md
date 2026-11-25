@@ -274,6 +274,14 @@ Exemplo:
 
 deve produzir `TypeError`.
 
+### Igualdade de coleções
+
+Listas comparam seus elementos na ordem. Records comparam as chaves e os
+respectivos valores, independentemente da ordem dos campos. Streams comparam
+a ordem das colunas, quando presente, e os elementos na ordem. As comparações
+aplicam as mesmas regras aos valores aninhados. Por exemplo, `[0] == [-0]`
+retorna `true`.
+
 ### Imutabilidade
 
 Bindings introduzidos por `let`, parâmetros de função e definições de topo são imutáveis.
@@ -313,6 +321,13 @@ Acesso:
 
 ```gopherflow
 record.temperature
+```
+
+Chaves também podem ser acessadas por uma expressão `String`. Isso permite
+consultar nomes de colunas CSV e chaves de `keyBy` que não são identificadores.
+
+```gopherflow
+record["air temperature"]
 ```
 
 Os campos são avaliados na ordem em que aparecem. Nomes repetidos são erros

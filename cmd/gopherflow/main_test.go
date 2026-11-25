@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,5 +112,28 @@ func TestCLIConcurrentAST(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if status := run([]string{writeProgram(t, source)}, &stdout, &stderr); status != 0 || stdout.String() != "4032\n" || stderr.Len() != 0 {
 		t.Fatalf("evaluation exited %d, stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+	}
+}
+
+func TestCSVComputedFieldFromFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.csv")
+	if err := os.WriteFile(path, []byte("air temperature\n30\n-2\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	program := fmt.Sprintf(`source(%q) |> map(fn(row) => row["air temperature"]) |> reduce(0, fn(sum, n) => sum + n)`, path)
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{writeProgram(t, program)}, &stdout, &stderr); status != 0 || stdout.String() != "28\n" || stderr.Len() != 0 {
+		t.Fatalf("pipeline exited %d, stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+	}
+}
+
+type failedOutput struct{}
+
+func (failedOutput) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestCLIReportsOutputFailure(t *testing.T) {
+	var stderr bytes.Buffer
+	if status := run(nil, failedOutput{}, &stderr); status != 1 || !strings.Contains(stderr.String(), io.ErrClosedPipe.Error()) {
+		t.Fatalf("write failure exited %d, stderr=%q", status, stderr.String())
 	}
 }

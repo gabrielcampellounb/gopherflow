@@ -164,3 +164,22 @@ func BenchmarkEvaluateIndependentItems(b *testing.B) {
 		})
 	}
 }
+
+func TestWorkerBatchesUseCollectionEqualityAndComputedRecordKeys(t *testing.T) {
+	items := make([]string, 2*nonliteralItemsPerWorker)
+	for i := range items {
+		items[i] = fmt.Sprintf(`let key = "x" in {x: [%d]}[key] == [%d]`, i, i)
+	}
+	items[len(items)-1] = `let key = "x" in {x: [1]}[key] == [2]`
+	program := parallelTestProgram(t, "["+strings.Join(items, ",")+"]")
+	sequential, err := Evaluate(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := &execution{workerLimit: 2}
+	defer run.close()
+	parallel, err := run.evaluateProgram(Optimize(program), runtime.NewEnvironment(nil))
+	if err != nil || run.pool == nil || !runtime.Equal(sequential, parallel) {
+		t.Fatalf("sequential=%v parallel=%v error=%v pool=%v", sequential, parallel, err, run.pool)
+	}
+}

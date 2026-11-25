@@ -162,11 +162,7 @@ func (exec *execution) evaluateExpression(expression ast.Expression, environment
 		if !ok {
 			return nil, fmt.Errorf("type error at %d:%d: %s has no fields", node.Pos.Line, node.Pos.Column, target.Type())
 		}
-		value, ok := record[node.Name.Name]
-		if !ok {
-			return nil, fmt.Errorf("runtime error at %d:%d: unknown record field %q", node.Name.Pos.Line, node.Name.Pos.Column, node.Name.Name)
-		}
-		return value, nil
+		return lookupField(record, node.Name.Name, node.Name.Pos)
 	case *ast.IndexExpression:
 		return exec.evaluateIndex(node, environment)
 	default:
@@ -246,6 +242,14 @@ func (exec *execution) evaluateIndex(expression *ast.IndexExpression, environmen
 		return nil, err
 	}
 	position := expression.Pos
+	if record, ok := target.(runtime.Record); ok {
+		key, ok := index.(runtime.String)
+		if !ok {
+			return nil, fmt.Errorf("type error at %d:%d: record key must be a String, got %s",
+				position.Line, position.Column, index.Type())
+		}
+		return lookupField(record, string(key), position)
+	}
 	list, ok := target.(runtime.List)
 	if !ok {
 		return nil, fmt.Errorf("type error at %d:%d: %s is not indexable",
@@ -266,6 +270,13 @@ func (exec *execution) evaluateIndex(expression *ast.IndexExpression, environmen
 			position.Line, position.Column, number.Inspect(), len(list))
 	}
 	return list[int(value)], nil
+}
+
+func lookupField(record runtime.Record, key string, position token.Position) (runtime.Value, error) {
+	if value, ok := record[key]; ok {
+		return value, nil
+	}
+	return nil, fmt.Errorf("runtime error at %d:%d: unknown record field %q", position.Line, position.Column, key)
 }
 
 func evaluateLiteral(literal *ast.Literal) (runtime.Value, error) {
@@ -336,10 +347,6 @@ func (exec *execution) evaluateBinary(expression *ast.BinaryExpression, environm
 				return nil, fmt.Errorf("runtime error at %d:%d: division by zero", expression.Operator.Position.Line, expression.Operator.Position.Column)
 			}
 			return runtime.Number(math.Mod(float64(leftNumber), float64(rightNumber))), nil
-		case token.Equal:
-			return runtime.Bool(leftNumber == rightNumber), nil
-		case token.NotEqual:
-			return runtime.Bool(leftNumber != rightNumber), nil
 		case token.Less:
 			return runtime.Bool(leftNumber < rightNumber), nil
 		case token.LessEqual:
@@ -351,10 +358,10 @@ func (exec *execution) evaluateBinary(expression *ast.BinaryExpression, environm
 		}
 	}
 	if expression.Operator.Type == token.Equal {
-		return runtime.Bool(left.Type() == right.Type() && left.Inspect() == right.Inspect()), nil
+		return runtime.Bool(runtime.Equal(left, right)), nil
 	}
 	if expression.Operator.Type == token.NotEqual {
-		return runtime.Bool(!(left.Type() == right.Type() && left.Inspect() == right.Inspect())), nil
+		return runtime.Bool(!runtime.Equal(left, right)), nil
 	}
 	return nil, fmt.Errorf("type error at %d:%d: operator %s is not defined for %s and %s", expression.Operator.Position.Line, expression.Operator.Position.Column, expression.Operator.Lexeme, left.Type(), right.Type())
 }

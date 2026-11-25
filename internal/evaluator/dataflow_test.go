@@ -6,6 +6,7 @@ import (
 
 	"github.com/gabrielcampellounb/gopherflow/internal/lexer"
 	"github.com/gabrielcampellounb/gopherflow/internal/parser"
+	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
 )
 
 func TestDataflowOperations(t *testing.T) {
@@ -56,6 +57,41 @@ func TestDataflowErrors(t *testing.T) {
 		}
 		if got, err := Evaluate(Optimize(program)); got != nil || err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("%s: got %v, %v, want %s", tt.source, got, err, tt.want)
+		}
+	}
+}
+
+func TestRecordIndexAndCollectionEquality(t *testing.T) {
+	huge := "1" + strings.Repeat("0", 308)
+	for _, tt := range []struct{ source, want, failure string }{
+		{`let g = ["New York", "Lima", "New York"] |> keyBy(fn(x) => x) in g["New York"] |> reduce(0, fn(n, x) => n + 1)`, "2", ""},
+		{`let key = "group" in {group: [10]}[key][0]`, "10", ""},
+		{`{x: null}["x"]`, "null", ""},
+		{`{}["missing"]`, "", `runtime error at 1:3: unknown record field "missing"`},
+		{`{}[1]`, "", "type error at 1:3: record key must be a String, got Number"},
+		{`missing[other]`, "", `name error at 1:1: undefined identifier "missing"`},
+		{`{}[missing]`, "", `name error at 1:4: undefined identifier "missing"`},
+		{`[0] == [-0]`, "true", ""},
+		{`{a: [0, null], b: true} == {b: true, a: [-0, null]}`, "true", ""},
+		{`{a: 1} != {b: 1}`, "true", ""},
+		{`[1, 2] != [2, 1]`, "true", ""},
+		{`([1] |> take(1)) == ([2] |> take(1))`, "false", ""},
+		{`([0] |> take(1)) == ([-0] |> take(1))`, "true", ""},
+		{"let inf = " + huge + " * " + huge + " in let nan = inf / inf in [nan] == [nan]", "false", ""},
+	} {
+		program := parallelTestProgram(t, tt.source)
+		for _, result := range []func() (runtime.Value, error){
+			func() (runtime.Value, error) { return Evaluate(program) },
+			func() (runtime.Value, error) { return EvaluateConcurrent(program, 4) },
+		} {
+			value, err := result()
+			if tt.failure != "" {
+				if value != nil || err == nil || err.Error() != tt.failure {
+					t.Errorf("%q = %v, %v, want %q", tt.source, value, err, tt.failure)
+				}
+			} else if err != nil || value == nil || value.Inspect() != tt.want {
+				t.Errorf("%q = %v, %v, want %q", tt.source, value, err, tt.want)
+			}
 		}
 	}
 }
