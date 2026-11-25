@@ -164,3 +164,25 @@ func TestOptimizePreservesEvaluationOrderAndEffects(t *testing.T) {
 		}
 	}
 }
+
+func TestOptimizeLiteralListIndex(t *testing.T) {
+	for _, tt := range []struct{ source, want string }{
+		{`[1 + 2, "a\n\"b", null][1]`, `"a\n\"b"`},
+		{"[false, null][1]", "null"},
+		{"[4, 8][2 - 1] * 2", "16"},
+		{"[false, true][1]", "true"},
+		{"[1, missing()][0]", "[1, missing()][0]"},
+		{"[1, (2 / 0)][0]", "[1, (2 / 0)][0]"},
+		{"[1][1]", "[1][1]"},
+		{"[1][0.5]", "[1][0.5]"},
+	} {
+		program, err := parser.Parse(lexer.New(tt.source))
+		if err != nil {
+			t.Fatal(err)
+		}
+		optimized := Optimize(program)
+		if got := optimized.String(); got != tt.want {
+			t.Errorf("Optimize(%q) = %q, want %q", tt.source, got, tt.want)
+		}
+	}
+}

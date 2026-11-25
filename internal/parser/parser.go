@@ -110,11 +110,7 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 		}
 
 	case token.LeftBracket:
-		position := p.current.Position
-		if err = p.advance(); err != nil {
-			return nil, err
-		}
-		left, err = p.parseList(position)
+		left, err = p.parseList()
 
 	default:
 		if p.current.Type == token.If && precedence == 0 {
@@ -142,9 +138,16 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 		return nil, err
 	}
 
+	hasComparison := false
 	for precedence < precedenceOf(p.current.Type) {
 		operator := p.current
 		operatorPrecedence := precedenceOf(operator.Type)
+		if operatorPrecedence == comparisonPrecedence {
+			if hasComparison {
+				return nil, p.errorf("comparison operators cannot be chained without parentheses")
+			}
+		}
+		hasComparison = operatorPrecedence == comparisonPrecedence
 		if err = p.advance(); err != nil {
 			return nil, err
 		}
@@ -223,27 +226,9 @@ func (p *Parser) parseLet() (ast.Expression, error) {
 
 func (p *Parser) parseCall(callee ast.Expression) (ast.Expression, error) {
 	position := p.current.Position
-	if err := p.advance(); err != nil {
+	arguments, err := p.parseExpressionList(token.RightParen, "expected ')' after arguments")
+	if err != nil {
 		return nil, err
-	}
-	var arguments []ast.Expression
-	if p.current.Type != token.RightParen {
-		for {
-			argument, err := p.parseExpression(0)
-			if err != nil {
-				return nil, err
-			}
-			arguments = append(arguments, argument)
-			if p.current.Type != token.Comma {
-				break
-			}
-			if err := p.advance(); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if p.current.Type != token.RightParen {
-		return nil, p.errorf("expected ')' after arguments")
 	}
 	if err := p.advance(); err != nil {
 		return nil, err
@@ -312,27 +297,42 @@ func (p *Parser) parseParameters() ([]*ast.Identifier, error) {
 	return parameters, nil
 }
 
-func (p *Parser) parseList(position token.Position) (ast.Expression, error) {
-	var elements []ast.Expression
-	if p.current.Type != token.RightBracket {
-		for {
-			element, err := p.parseExpression(0)
-			if err != nil {
-				return nil, err
-			}
-			elements = append(elements, element)
-			if p.current.Type != token.Comma {
-				break
-			}
+func (p *Parser) parseList() (ast.Expression, error) {
+	position := p.current.Position
+	elements, err := p.parseExpressionList(token.RightBracket, "expected ']' after list elements")
+	if err != nil {
+		return nil, err
+	}
+	return &ast.ListLiteral{Elements: elements, Pos: position}, nil
+}
+
+// parseExpressionList consumes the opening delimiter and leaves the closing
+// delimiter for its caller.
+func (p *Parser) parseExpressionList(end token.TokenType, missingEnd string) ([]ast.Expression, error) {
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	if p.current.Type == end {
+		return nil, nil
+	}
+	var expressions []ast.Expression
+	for {
+		expression, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		expressions = append(expressions, expression)
+		switch p.current.Type {
+		case end:
+			return expressions, nil
+		case token.Comma:
 			if err := p.advance(); err != nil {
 				return nil, err
 			}
+		default:
+			return nil, p.errorf("%s", missingEnd)
 		}
 	}
-	if p.current.Type != token.RightBracket {
-		return nil, p.errorf("expected ']' after list elements")
-	}
-	return &ast.ListLiteral{Elements: elements, Pos: position}, nil
 }
 
 func (p *Parser) parseIndex(target ast.Expression) (ast.Expression, error) {
@@ -402,7 +402,10 @@ func (p *Parser) parseIf() (ast.Expression, error) {
 	return &ast.IfExpression{Condition: condition, Consequence: consequence, Alternative: alternative, Pos: position}, nil
 }
 
-const unaryPrecedence = 8
+const (
+	comparisonPrecedence = 5
+	unaryPrecedence      = 8
+)
 
 func precedenceOf(kind token.TokenType) int {
 	switch kind {
@@ -415,7 +418,7 @@ func precedenceOf(kind token.TokenType) int {
 	case token.Equal, token.NotEqual:
 		return 4
 	case token.Less, token.LessEqual, token.Greater, token.GreaterEq:
-		return 5
+		return comparisonPrecedence
 	case token.Plus, token.Minus:
 		return 6
 	case token.Star, token.Slash, token.Percent:

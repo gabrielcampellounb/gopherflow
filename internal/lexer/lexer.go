@@ -2,6 +2,7 @@ package lexer
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/token"
 )
@@ -118,9 +119,7 @@ func (l *Lexer) Next() (token.Token, error) {
 func (l *Lexer) skipWhitespace() {
 	for !l.atEnd() {
 		switch l.source[l.offset] {
-		case ' ', '\t', '\r':
-			l.advance()
-		case '\n':
+		case ' ', '\t', '\r', '\n':
 			l.advance()
 		default:
 			return
@@ -163,36 +162,41 @@ func isDigit(ch byte) bool {
 }
 
 func (l *Lexer) readString(start token.Position) (string, error) {
-	var value []byte
+	var value strings.Builder
+	chunkStart := l.offset
 	for !l.atEnd() {
 		ch := l.advance()
-		if ch == '"' {
-			return string(value), nil
-		}
-		if ch == '\\' {
-			if l.atEnd() {
-				break
+		switch ch {
+		case '"':
+			chunk := l.source[chunkStart : l.offset-1]
+			if value.Len() == 0 {
+				return chunk, nil
 			}
+			value.WriteString(chunk)
+			return value.String(), nil
+		case '\\':
+			if l.atEnd() {
+				return "", &Error{Position: start, Message: "unterminated string"}
+			}
+			value.WriteString(l.source[chunkStart : l.offset-1])
 			escapePosition := l.position()
 			escaped := l.advance()
 			switch escaped {
 			case '"', '\\':
-				value = append(value, escaped)
+				value.WriteByte(escaped)
 			case 'n':
-				value = append(value, '\n')
+				value.WriteByte('\n')
 			case 'r':
-				value = append(value, '\r')
+				value.WriteByte('\r')
 			case 't':
-				value = append(value, '\t')
+				value.WriteByte('\t')
 			default:
 				return "", &Error{Position: escapePosition, Message: fmt.Sprintf("invalid escape \\%c", escaped)}
 			}
-			continue
-		}
-		if ch == '\n' {
+			chunkStart = l.offset
+		case '\n':
 			return "", &Error{Position: start, Message: "unterminated string"}
 		}
-		value = append(value, ch)
 	}
 	return "", &Error{Position: start, Message: "unterminated string"}
 }

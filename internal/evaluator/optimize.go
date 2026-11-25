@@ -151,11 +151,27 @@ func optimizeExpression(expression ast.Expression) ast.Expression {
 		next := *node
 		next.Target = optimizeExpression(node.Target)
 		next.Index = optimizeExpression(node.Index)
+		if list, ok := next.Target.(*ast.ListLiteral); ok {
+			if _, ok := next.Index.(*ast.Literal); ok && hasOnlyLiteralElements(list) {
+				if folded := foldLiteral(&next); folded != nil {
+					return folded
+				}
+			}
+		}
 		if next.Target != node.Target || next.Index != node.Index {
 			return &next
 		}
 	}
 	return expression
+}
+
+func hasOnlyLiteralElements(list *ast.ListLiteral) bool {
+	for _, element := range list.Elements {
+		if _, ok := element.(*ast.Literal); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // The caller proves evaluation only touches literals, including cases where
@@ -180,6 +196,12 @@ func foldLiteral(expression ast.Expression) *ast.Literal {
 			literal.Kind = token.True
 		}
 		literal.Value = value.Inspect()
+	case runtime.String:
+		literal.Kind = token.String
+		literal.Value = string(value)
+	case runtime.Null:
+		literal.Kind = token.Null
+		literal.Value = "null"
 	default:
 		return nil
 	}

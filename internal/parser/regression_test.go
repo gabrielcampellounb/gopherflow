@@ -730,3 +730,18 @@ func TestSyntaxListIndex(t *testing.T) {
 		})
 	}
 }
+
+func TestComparisonOperatorsRequireGrouping(t *testing.T) {
+	for _, source := range []string{"1 < 2 <= 3", "1 >= 2 > 3", "true and 1 < 2 < 3"} {
+		program, err := Parse(lexer.New(source))
+		var parseErr *Error
+		if program != nil || !errors.As(err, &parseErr) || parseErr.Message != "comparison operators cannot be chained without parentheses" {
+			t.Errorf("Parse(%q) = %v, %v", source, program, err)
+		}
+	}
+	for _, source := range []string{"(1 < 2) < 3", "1 < (2 < 3)", "1 < 2 and 3 < 4", "1 < 2 == 3 < 4", "1 < 2 or 3 < 4 and 5 < 6"} {
+		if _, err := Parse(lexer.New(source)); err != nil {
+			t.Errorf("Parse(%q): %v", source, err)
+		}
+	}
+}

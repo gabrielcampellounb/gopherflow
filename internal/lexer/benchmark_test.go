@@ -22,3 +22,23 @@ func BenchmarkTokenize(b *testing.B) {
 		}
 	}
 }
+
+var stringToken token.Token
+
+func BenchmarkStringToken(b *testing.B) {
+	for _, tc := range []struct{ name, source string }{
+		{"plain", `"a plain string with enough text to grow a buffer"`},
+		{"escaped", `"a string with\nnewlines and \"quotes\""`},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				var err error
+				stringToken, err = New(tc.source).Next()
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
