@@ -197,6 +197,10 @@ digit =
   | "5" | "6" | "7" | "8" | "9" ;
 ```
 
+Dentro de strings, aspas e barras invertidas devem ser escapadas. Os escapes
+reconhecidos são `\"`, `\\`, `\n`, `\r` e `\t`. Uma quebra de linha literal
+encerra a leitura com erro.
+
 ### Palavras reservadas
 
 ```text
@@ -244,6 +248,9 @@ equivale a:
 ```text
 g(f(x))
 ```
+
+Quando o operando direito é uma chamada, o valor à esquerda entra como
+primeiro argumento. `x |> f(a, b)` equivale a `f(x, a, b)`.
 
 ---
 
@@ -307,6 +314,9 @@ Acesso:
 ```gopherflow
 record.temperature
 ```
+
+Os campos são avaliados na ordem em que aparecem. Nomes repetidos são erros
+de sintaxe, e o acesso a um campo ausente produz um erro em tempo de execução.
 
 ### Listas
 

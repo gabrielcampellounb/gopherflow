@@ -7,12 +7,11 @@ import (
 )
 
 func Environment() *runtime.Record {
-	return &runtime.Record{
-		"source": runtime.Builtin{Name: "source", Call: unavailable("source")},
-		"map":    runtime.Builtin{Name: "map", Call: unavailable("map")},
-		"filter": runtime.Builtin{Name: "filter", Call: unavailable("filter")},
-		"sink":   runtime.Builtin{Name: "sink", Call: unavailable("sink")},
+	bindings := make(runtime.Record)
+	for _, name := range []string{"source", "map", "filter", "flatMap", "take", "keyBy", "reduce", "forEach", "sink"} {
+		bindings[name] = runtime.Builtin{Name: name, Call: unavailable(name)}
 	}
+	return &bindings
 }
 
 func unavailable(name string) func([]runtime.Value) (runtime.Value, error) {

@@ -186,3 +186,64 @@ func TestOptimizeLiteralListIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestGrammarEvaluationWithAndWithoutOptimization(t *testing.T) {
+	for _, tt := range []struct{ source, result, errorText string }{
+		{"{}", "{}", ""},
+		{"{b: 2, a: 1}", "{a: 1, b: 2}", ""},
+		{"{a: [{b: fn(x) => x * 2}]}.a[0].b(3)", "6", ""},
+		{"def twice(x) = x * 2; def inc(x) = x + 1; 3 |> twice |> inc", "7", ""},
+		{"3 |> (fn(x) => x + 1)", "4", ""},
+		{"def sub(x, y) = x - y; 7 |> sub(2)", "5", ""},
+		{"def make(y) = fn(x) => x + y; 3 |> (if true then make(4) else missing)", "7", ""},
+		{"{first: missing, next: 1 / 0}.next", "", "name error at 1:9: undefined identifier \"missing\""},
+		{"{}.unknown", "", "runtime error at 1:4: unknown record field \"unknown\""},
+		{"1.key", "", "type error at 1:2: Number has no fields"},
+		{"1 |> 2", "", "type error at 1:3: Number is not callable"},
+		{"missing |> absent", "", "name error at 1:12: undefined identifier \"absent\""},
+		{"take(2)", "", "runtime error at 1:5: stdlib function take is not implemented"},
+		{"let take = fn(x) => x + 1 in 2 |> take", "3", ""},
+	} {
+		t.Run(tt.source, func(t *testing.T) {
+			program, err := parser.Parse(lexer.New(tt.source))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, tree := range []*ast.Program{program, Optimize(program)} {
+				value, err := Evaluate(tree)
+				if tt.errorText != "" {
+					if value != nil || err == nil || err.Error() != tt.errorText {
+						t.Fatalf("%q evaluated to %v, %v, want %q", tree, value, err, tt.errorText)
+					}
+				} else if err != nil || value.Inspect() != tt.result {
+					t.Fatalf("%q evaluated to %v, %v, want %q", tree, value, err, tt.result)
+				}
+			}
+		})
+	}
+}
+
+func TestBuiltinEffectsAreOrderedAndNeverRunDuringOptimization(t *testing.T) {
+	program, err := parser.Parse(lexer.New("def pair(x, y) = [x, y]; {a: mark(1 + 1) |> pair(mark(3)), b: mark(4)}.a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []runtime.Value
+	env := runtime.NewEnvironment(nil)
+	env.Set("mark", runtime.Builtin{Name: "mark", Call: func(args []runtime.Value) (runtime.Value, error) {
+		calls = append(calls, args[0])
+		return args[0], nil
+	}})
+	optimized := Optimize(program)
+	if len(calls) != 0 {
+		t.Fatalf("optimization executed builtin: %v", calls)
+	}
+	for _, tree := range []*ast.Program{program, optimized} {
+		calls = nil
+		got, err := EvaluateIn(tree, env)
+		wantCalls := []runtime.Value{runtime.Number(2), runtime.Number(3), runtime.Number(4)}
+		if err != nil || got.Inspect() != "[2, 3]" || !slices.Equal(calls, wantCalls) {
+			t.Fatalf("got %v, %v, effects %v", got, err, calls)
+		}
+	}
+}

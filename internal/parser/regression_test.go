@@ -115,7 +115,7 @@ func TestSyntaxErrorDetails(t *testing.T) {
 		{"(1", "expected ')'", 2, 1, 3},
 		{"1 2", "expected end of input, got NUMBER", 2, 1, 3},
 		{"1;;", "expected end of input, got ;", 2, 1, 3},
-		{"1.", "expected end of input, got .", 1, 1, 2},
+		{"1.", "expected field name after '.'", 2, 1, 3},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			p, err := Parse(lexer.New(tt.source))
@@ -144,7 +144,7 @@ func TestLexicalErrorsPropagate(t *testing.T) {
 }
 
 func TestInvalidAndUnimplementedSyntax(t *testing.T) {
-	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "{x: 1}", "x.y", "-let x = 1 in x", "1; 2", strings.Repeat("9", 400)} {
+	for _, source := range []string{"()", "(1))", "1 + ;", "let true = 1 in 2", "let x = in x", "let x = 1", "let x = 1 in", "{x: 1,}", "x.", "1 + let x = 2 in x", "1 |> fn(x) => x", "not fn() => true", "_x", "-let x = 1 in x", "1; 2", strings.Repeat("9", 400)} {
 		p, err := Parse(lexer.New(source))
 		if err == nil || p != nil {
 			t.Errorf("accepted %q: %v", source, p)
@@ -169,7 +169,7 @@ func TestProgramStringRoundTrip(t *testing.T) {
 }
 
 func FuzzParser(f *testing.F) {
-	for _, s := range []string{"", "null", "let x = 1 in x + 2", "(1 + 2) * 3", "1 +", `"\n"`, "(let x = 1 in x) + 2"} {
+	for _, s := range []string{"", "null", "let x = 1 in x + 2", "(1 + 2) * 3", "1 +", `"\n"`, "(let x = 1 in x) + 2", "{f: fn(x) => x}.f(2)", "{a: [1, 2]}.a[0]"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
@@ -742,6 +742,35 @@ func TestComparisonOperatorsRequireGrouping(t *testing.T) {
 	for _, source := range []string{"(1 < 2) < 3", "1 < (2 < 3)", "1 < 2 and 3 < 4", "1 < 2 == 3 < 4", "1 < 2 or 3 < 4 and 5 < 6"} {
 		if _, err := Parse(lexer.New(source)); err != nil {
 			t.Errorf("Parse(%q): %v", source, err)
+		}
+	}
+}
+
+func TestRecordSyntax(t *testing.T) {
+	for _, source := range []string{"{}", "{a: 1, b: {c: [3]}}.b.c[0]", "{apply: fn(x) => x}.apply(2)", "0 |> ({f: fn(x) => x}.f)"} {
+		parsed, err := Parse(lexer.New(source))
+		if err != nil {
+			t.Fatalf("Parse(%q): %v", source, err)
+		}
+		rendered := parsed.String()
+		reparsed, err := Parse(lexer.New(rendered))
+		if err != nil || reparsed.String() != rendered {
+			t.Fatalf("cannot round-trip %q: %v, %v", rendered, reparsed, err)
+		}
+	}
+	for _, tt := range []struct {
+		source, message string
+		column          int
+	}{
+		{"{a: 1, a: 2}", "duplicate record field \"a\"", 8},
+		{"{a 1}", "expected ':' after record field name", 4},
+		{"{a: 1 x}", "expected '}' after record fields", 7},
+		{"x.true", "expected field name after '.'", 3},
+	} {
+		_, err := Parse(lexer.New(tt.source))
+		var parseErr *Error
+		if !errors.As(err, &parseErr) || parseErr.Position.Column != tt.column || parseErr.Message != tt.message {
+			t.Errorf("Parse(%q) = %v, want %s at column %d", tt.source, err, tt.message, tt.column)
 		}
 	}
 }

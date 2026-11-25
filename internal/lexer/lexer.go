@@ -35,7 +35,7 @@ func (l *Lexer) Next() (token.Token, error) {
 	}
 
 	ch := l.advance()
-	if isLetter(ch) || ch == '_' {
+	if isLetter(ch) {
 		lexeme := l.readIdentifier()
 		return token.Token{Type: token.LookupIdentifier(lexeme), Lexeme: lexeme, Position: start}, nil
 	}

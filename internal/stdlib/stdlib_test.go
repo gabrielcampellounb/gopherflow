@@ -7,10 +7,10 @@ import (
 
 func TestPlaceholdersAreExplicitAndIndependent(t *testing.T) {
 	env := Environment()
-	if env == nil || len(*env) != 4 {
+	if env == nil || len(*env) != 9 {
 		t.Fatalf("unexpected environment: %v", env)
 	}
-	for _, name := range []string{"source", "map", "filter", "sink"} {
+	for _, name := range []string{"source", "map", "filter", "flatMap", "take", "keyBy", "reduce", "forEach", "sink"} {
 		b, ok := (*env)[name].(runtime.Builtin)
 		if !ok || b.Name != name || b.Call == nil {
 			t.Fatalf("invalid builtin %q: %#v", name, (*env)[name])

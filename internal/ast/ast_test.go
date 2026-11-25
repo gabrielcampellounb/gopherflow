@@ -169,3 +169,27 @@ func TestListNodesRenderingAndPosition(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordAndFieldRendering(t *testing.T) {
+	recordPos := token.Position{Line: 1, Column: 1}
+	fieldPos := token.Position{Line: 1, Column: 7}
+	name := &Identifier{Name: "x"}
+	record := &RecordLiteral{
+		Fields: []RecordField{{Name: name, Value: &Literal{Kind: token.Number, Value: "1"}}},
+		Pos:    recordPos,
+	}
+	field := &FieldExpression{Target: record, Name: name, Pos: fieldPos}
+	for _, tt := range []struct {
+		node Node
+		text string
+		pos  token.Position
+	}{
+		{record, "{x: 1}", recordPos},
+		{field, "{x: 1}.x", fieldPos},
+		{&RecordLiteral{}, "{}", token.Position{}},
+	} {
+		if tt.node.String() != tt.text || tt.node.Position() != tt.pos {
+			t.Errorf("got %q at %v, want %q at %v", tt.node.String(), tt.node.Position(), tt.text, tt.pos)
+		}
+	}
+}

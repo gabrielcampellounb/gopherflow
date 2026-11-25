@@ -70,6 +70,9 @@ func optimizeExpression(expression ast.Expression) ast.Expression {
 			return &next
 		}
 	case *ast.BinaryExpression:
+		if node.Operator.Type == token.Pipe {
+			return optimizeExpression(pipelineCall(node))
+		}
 		next := *node
 		next.Left = optimizeExpression(node.Left)
 		left, leftIsLiteral := next.Left.(*ast.Literal)
@@ -145,6 +148,27 @@ func optimizeExpression(expression ast.Expression) ast.Expression {
 		if elements, changed := optimizeExpressions(node.Elements); changed {
 			next := *node
 			next.Elements = elements
+			return &next
+		}
+	case *ast.RecordLiteral:
+		next := *node
+		changed := false
+		for i, field := range node.Fields {
+			if value := optimizeExpression(field.Value); value != field.Value {
+				if !changed {
+					next.Fields = slices.Clone(node.Fields)
+					changed = true
+				}
+				next.Fields[i].Value = value
+			}
+		}
+		if changed {
+			return &next
+		}
+	case *ast.FieldExpression:
+		if target := optimizeExpression(node.Target); target != node.Target {
+			next := *node
+			next.Target = target
 			return &next
 		}
 	case *ast.IndexExpression:

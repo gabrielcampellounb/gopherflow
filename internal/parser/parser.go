@@ -111,15 +111,17 @@ func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
 
 	case token.LeftBracket:
 		left, err = p.parseList()
+	case token.LeftBrace:
+		left, err = p.parseRecord()
 
 	default:
 		if p.current.Type == token.If && precedence == 0 {
 			return p.parseIf()
 		}
-		if p.current.Type == token.Let && precedence < unaryPrecedence {
+		if p.current.Type == token.Let && precedence == 0 {
 			return p.parseLet()
 		}
-		if p.current.Type == token.Fn {
+		if p.current.Type == token.Fn && precedence == 0 {
 			return p.parseFunction()
 		}
 		return nil, p.errorf("expected expression, got %s", p.current.Type)
@@ -335,6 +337,66 @@ func (p *Parser) parseExpressionList(end token.TokenType, missingEnd string) ([]
 	}
 }
 
+func (p *Parser) parseRecord() (ast.Expression, error) {
+	record := &ast.RecordLiteral{Pos: p.current.Position}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	if p.current.Type == token.RightBrace {
+		return record, nil
+	}
+	seen := make(map[string]bool)
+	for {
+		if p.current.Type != token.Identifier {
+			return nil, p.errorf("expected record field name, got %s", p.current.Type)
+		}
+		name := &ast.Identifier{Name: p.current.Lexeme, Pos: p.current.Position}
+		if seen[name.Name] {
+			return nil, p.errorf("duplicate record field %q", name.Name)
+		}
+		seen[name.Name] = true
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+		if p.current.Type != token.Colon {
+			return nil, p.errorf("expected ':' after record field name")
+		}
+		if err := p.advance(); err != nil {
+			return nil, err
+		}
+		value, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		record.Fields = append(record.Fields, ast.RecordField{Name: name, Value: value})
+		switch p.current.Type {
+		case token.RightBrace:
+			return record, nil
+		case token.Comma:
+			if err := p.advance(); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, p.errorf("expected '}' after record fields")
+		}
+	}
+}
+
+func (p *Parser) parseField(target ast.Expression) (ast.Expression, error) {
+	position := p.current.Position
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	if p.current.Type != token.Identifier {
+		return nil, p.errorf("expected field name after '.'")
+	}
+	name := &ast.Identifier{Name: p.current.Lexeme, Pos: p.current.Position}
+	if err := p.advance(); err != nil {
+		return nil, err
+	}
+	return &ast.FieldExpression{Target: target, Name: name, Pos: position}, nil
+}
+
 func (p *Parser) parseIndex(target ast.Expression) (ast.Expression, error) {
 	position := p.current.Position
 	if err := p.advance(); err != nil {
@@ -361,6 +423,8 @@ func (p *Parser) parseSuffixes(left ast.Expression) (ast.Expression, error) {
 			left, err = p.parseCall(left)
 		case token.LeftBracket:
 			left, err = p.parseIndex(left)
+		case token.Dot:
+			left, err = p.parseField(left)
 		default:
 			return left, nil
 		}

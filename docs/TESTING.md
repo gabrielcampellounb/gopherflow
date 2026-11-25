@@ -10,8 +10,8 @@ make coverage
 
 `make check` verifica formatação, vet, staticcheck, testes e detector de corridas.
 Os testes de processo também verificam stdout, stderr e códigos de saída do CLI.
-A cobertura mede caminhos executados, não prova correção. Os caminhos de erro do
-CLI que analisam a constante `null` não são artificialmente ativados por mocks.
+A cobertura mede caminhos executados. Os testes do CLI executam arquivos reais
+e verificam erros de leitura, análise e avaliação.
 
 A suíte cobre tokens e posições, escapes existentes, limites numéricos,
 precedência e associatividade, estrutura e reconstrução da AST, aritmética,
@@ -20,10 +20,10 @@ determinística dos valores. Avaliações independentes compartilham uma AST em 
 teste paralelo; isso não implica que um Environment mutável possa ser escrito
 simultaneamente por várias goroutines.
 
-Os testes distinguem as camadas: reconhecer ou analisar um operador não implica
-que o evaluator já o execute. Operadores sem implementação devem retornar erro.
-As funções da stdlib continuam sendo placeholders explícitos, e o CLI continua
-sem executar arquivos. A suíte não implementa os recursos futuros de LANGUAGE.md.
+Os testes de conformidade exercitam records, acesso a campos, chamadas e
+pipelines com e sem otimização, incluindo a ordem dos efeitos. A biblioteca
+padrão registra os nomes de dataflow e retorna erros explícitos ao chamar
+operações cuja execução ainda está pendente.
 
 ## Fuzzing
 

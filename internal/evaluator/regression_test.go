@@ -60,7 +60,7 @@ func TestEvaluationErrorsAndOrder(t *testing.T) {
 		{"false - 1", "operator - is not defined for Bool and Number"},
 		{`"a" * 2`, "operator * is not defined for String and Number"},
 		{"null / 0", "operator / is not defined for Null and Number"},
-		{"1 |> 2", "operator |> is not defined"},
+		{"1 |> 2", "Number is not callable"},
 	} {
 		t.Run(tt.source, func(t *testing.T) {
 			p, err := parser.Parse(lexer.New(tt.source))
@@ -203,7 +203,7 @@ func FuzzArithmetic(f *testing.F) {
 }
 
 func FuzzEvaluation(f *testing.F) {
-	for _, s := range []string{"1 + 2", "missing", "let x = 1 in x", `"\n"`, "1 / 0", "true and false", "if true then 3 * 2 else missing", "[1 + 2][0]", "(fn(x) => x + (3 * 2))(1)", "def f() = 1 + 2; f"} {
+	for _, s := range []string{"1 + 2", "missing", "let x = 1 in x", `"\n"`, "1 / 0", "true and false", "if true then 3 * 2 else missing", "[1 + 2][0]", "(fn(x) => x + (3 * 2))(1)", "def f() = 1 + 2; f", "{a: [1 + 2]}.a[0]", "1 |> (fn(x) => x * 2)"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {

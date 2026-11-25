@@ -81,7 +81,7 @@ func TestAllTokens(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"a", "A0_b", "_", "_x", "letx", "True", "source", "map", "filter", "sink"} {
+	for _, name := range []string{"a", "A0_b", "letx", "True", "source", "map", "filter", "sink"} {
 		got, err := New(name).Next()
 		if err != nil || got.Type != token.Identifier || got.Lexeme != name {
 			t.Errorf("identifier %q: %#v, %v", name, got, err)
@@ -170,6 +170,16 @@ func TestCompoundOperatorBoundaries(t *testing.T) {
 	for _, source := range []string{"!", "|", "!x", "|x"} {
 		if _, err := New(source).Next(); err == nil {
 			t.Errorf("accepted incomplete operator %q", source)
+		}
+	}
+}
+
+func TestIdentifiersStartWithASCIILetter(t *testing.T) {
+	for _, source := range []string{"_", "_x"} {
+		_, err := New(source).Next()
+		var lexicalError *Error
+		if !errors.As(err, &lexicalError) || lexicalError.Position.Column != 1 {
+			t.Errorf("Next(%q) = %v, want lexical error at column 1", source, err)
 		}
 	}
 }

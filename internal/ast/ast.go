@@ -59,6 +59,38 @@ func (l *ListLiteral) String() string {
 
 func (l *ListLiteral) Position() token.Position { return l.Pos }
 
+type RecordField struct {
+	Name  *Identifier
+	Value Expression
+}
+
+type RecordLiteral struct {
+	Fields []RecordField
+	Pos    token.Position
+}
+
+func (r *RecordLiteral) expressionNode()          {}
+func (r *RecordLiteral) Position() token.Position { return r.Pos }
+func (r *RecordLiteral) String() string {
+	fields := make([]string, len(r.Fields))
+	for i, field := range r.Fields {
+		fields[i] = field.Name.String() + ": " + field.Value.String()
+	}
+	return "{" + strings.Join(fields, ", ") + "}"
+}
+
+type FieldExpression struct {
+	Target Expression
+	Name   *Identifier
+	Pos    token.Position
+}
+
+func (f *FieldExpression) expressionNode()          {}
+func (f *FieldExpression) Position() token.Position { return f.Pos }
+func (f *FieldExpression) String() string {
+	return groupedOperand(f.Target) + "." + f.Name.String()
+}
+
 type IndexExpression struct {
 	Target Expression
 	Index  Expression

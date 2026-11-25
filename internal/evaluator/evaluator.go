@@ -7,11 +7,16 @@ import (
 
 	"github.com/gabrielcampellounb/gopherflow/internal/ast"
 	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
+	"github.com/gabrielcampellounb/gopherflow/internal/stdlib"
 	"github.com/gabrielcampellounb/gopherflow/internal/token"
 )
 
 func Evaluate(program *ast.Program) (runtime.Value, error) {
-	return EvaluateIn(program, runtime.NewEnvironment(nil))
+	environment := runtime.NewEnvironment(nil)
+	for name, value := range *stdlib.Environment() {
+		environment.Set(name, value)
+	}
+	return EvaluateIn(program, environment)
 }
 
 func EvaluateIn(program *ast.Program, environment *runtime.Environment) (runtime.Value, error) {
@@ -81,6 +86,9 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 		}
 		return nil, fmt.Errorf("type error at %d:%d: operator %s is not defined for %s", node.Operator.Position.Line, node.Operator.Position.Column, node.Operator.Lexeme, right.Type())
 	case *ast.BinaryExpression:
+		if node.Operator.Type == token.Pipe {
+			return evaluateCall(pipelineCall(node), environment)
+		}
 		return evaluateBinary(node, environment)
 	case *ast.FunctionLiteral:
 		parameters := make([]string, len(node.Parameters))
@@ -105,11 +113,51 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 			elements[i] = value
 		}
 		return elements, nil
+	case *ast.RecordLiteral:
+		record := make(runtime.Record, len(node.Fields))
+		for _, field := range node.Fields {
+			value, err := evaluateExpression(field.Value, environment)
+			if err != nil {
+				return nil, err
+			}
+			record[field.Name.Name] = value
+		}
+		return record, nil
+	case *ast.FieldExpression:
+		target, err := evaluateExpression(node.Target, environment)
+		if err != nil {
+			return nil, err
+		}
+		record, ok := target.(runtime.Record)
+		if !ok {
+			return nil, fmt.Errorf("type error at %d:%d: %s has no fields", node.Pos.Line, node.Pos.Column, target.Type())
+		}
+		value, ok := record[node.Name.Name]
+		if !ok {
+			return nil, fmt.Errorf("runtime error at %d:%d: unknown record field %q", node.Name.Pos.Line, node.Name.Pos.Column, node.Name.Name)
+		}
+		return value, nil
 	case *ast.IndexExpression:
 		return evaluateIndex(node, environment)
 	default:
 		return nil, fmt.Errorf("unsupported expression %T", expression)
 	}
+}
+
+// pipelineCall lowers x |> f to f(x) and x |> f(a) to f(x, a).
+// Keep the original right operand's form before optimization can change it.
+func pipelineCall(expression *ast.BinaryExpression) *ast.CallExpression {
+	call := &ast.CallExpression{
+		Function:  expression.Right,
+		Arguments: []ast.Expression{expression.Left},
+		Pos:       expression.Operator.Position,
+	}
+	if right, ok := expression.Right.(*ast.CallExpression); ok {
+		call.Function = right.Function
+		call.Arguments = append(call.Arguments, right.Arguments...)
+		call.Pos = right.Pos
+	}
+	return call
 }
 
 func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (runtime.Value, error) {
@@ -139,6 +187,15 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 			return evaluateExpression(function.OptimizedBody, scope)
 		}
 		return evaluateExpression(function.Body, scope)
+	case runtime.Builtin:
+		if function.Call == nil {
+			return nil, fmt.Errorf("runtime error at %d:%d: builtin %q has no implementation", position.Line, position.Column, function.Name)
+		}
+		value, err := function.Call(arguments)
+		if err != nil {
+			return nil, fmt.Errorf("runtime error at %d:%d: %w", position.Line, position.Column, err)
+		}
+		return value, nil
 	default:
 		return nil, fmt.Errorf("type error at %d:%d: %s is not callable",
 			position.Line, position.Column, callee.Type())
