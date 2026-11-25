@@ -220,7 +220,9 @@ func FuzzEvaluation(f *testing.F) {
 		if Optimize(optimized) != optimized {
 			t.Fatal("optimization did not reach a fixed point")
 		}
-		b, secondErr := EvaluateIn(optimized, runtime.NewEnvironment(nil))
+		concurrent := &execution{workerLimit: 2}
+		defer concurrent.close()
+		b, secondErr := concurrent.evaluateProgram(optimized, runtime.NewEnvironment(nil))
 		if (firstErr == nil) != (secondErr == nil) {
 			t.Fatalf("optimization changed error from %v to %v", firstErr, secondErr)
 		}

@@ -12,14 +12,24 @@ import (
 )
 
 func Evaluate(program *ast.Program) (runtime.Value, error) {
+	return EvaluateIn(program, standardEnvironment())
+}
+
+func standardEnvironment() *runtime.Environment {
 	environment := runtime.NewEnvironment(nil)
-	for name, value := range *stdlib.Environment(invokeFunction) {
+	// Standard bindings may outlive this evaluation through returned closures.
+	// Their callbacks use a sequential evaluator without a worker pool.
+	for name, value := range *stdlib.Environment((&execution{}).invokeFunction) {
 		environment.Set(name, value)
 	}
-	return EvaluateIn(program, environment)
+	return environment
 }
 
 func EvaluateIn(program *ast.Program, environment *runtime.Environment) (runtime.Value, error) {
+	return (&execution{}).evaluateProgram(program, environment)
+}
+
+func (exec *execution) evaluateProgram(program *ast.Program, environment *runtime.Environment) (runtime.Value, error) {
 	if len(program.Expressions) == 0 {
 		return runtime.Null{}, nil
 	}
@@ -39,10 +49,10 @@ func EvaluateIn(program *ast.Program, environment *runtime.Environment) (runtime
 			})
 		}
 	}
-	return evaluateExpression(program.Expressions[0], scope)
+	return exec.evaluateExpression(program.Expressions[0], scope)
 }
 
-func evaluateExpression(expression ast.Expression, environment *runtime.Environment) (runtime.Value, error) {
+func (exec *execution) evaluateExpression(expression ast.Expression, environment *runtime.Environment) (runtime.Value, error) {
 	switch node := expression.(type) {
 	case *ast.Identifier:
 		value, ok := environment.Get(node.Name)
@@ -53,15 +63,15 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 	case *ast.Literal:
 		return evaluateLiteral(node)
 	case *ast.LetExpression:
-		value, err := evaluateExpression(node.Value, environment)
+		value, err := exec.evaluateExpression(node.Value, environment)
 		if err != nil {
 			return nil, err
 		}
 		child := runtime.NewEnvironment(environment)
 		child.Set(node.Name.Name, value)
-		return evaluateExpression(node.Body, child)
+		return exec.evaluateExpression(node.Body, child)
 	case *ast.IfExpression:
-		condition, err := evaluateExpression(node.Condition, environment)
+		condition, err := exec.evaluateExpression(node.Condition, environment)
 		if err != nil {
 			return nil, err
 		}
@@ -70,11 +80,11 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 			return nil, fmt.Errorf("type error at %d:%d: if condition must be Bool, got %s", node.Pos.Line, node.Pos.Column, condition.Type())
 		}
 		if boolean {
-			return evaluateExpression(node.Consequence, environment)
+			return exec.evaluateExpression(node.Consequence, environment)
 		}
-		return evaluateExpression(node.Alternative, environment)
+		return exec.evaluateExpression(node.Alternative, environment)
 	case *ast.UnaryExpression:
-		right, err := evaluateExpression(node.Right, environment)
+		right, err := exec.evaluateExpression(node.Right, environment)
 		if err != nil {
 			return nil, err
 		}
@@ -87,9 +97,9 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 		return nil, fmt.Errorf("type error at %d:%d: operator %s is not defined for %s", node.Operator.Position.Line, node.Operator.Position.Column, node.Operator.Lexeme, right.Type())
 	case *ast.BinaryExpression:
 		if node.Operator.Type == token.Pipe {
-			return evaluateCall(pipelineCall(node), environment)
+			return exec.evaluateCall(pipelineCall(node), environment)
 		}
-		return evaluateBinary(node, environment)
+		return exec.evaluateBinary(node, environment)
 	case *ast.FunctionLiteral:
 		parameters := make([]string, len(node.Parameters))
 		for i, parameter := range node.Parameters {
@@ -102,11 +112,19 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 			Env:           environment,
 		}, nil
 	case *ast.CallExpression:
-		return evaluateCall(node, environment)
+		return exec.evaluateCall(node, environment)
 	case *ast.ListLiteral:
+		if values, scheduled, err := exec.parallelItems(len(node.Elements), func(i int) ast.Expression {
+			return node.Elements[i]
+		}); scheduled {
+			if err != nil {
+				return nil, err
+			}
+			return runtime.List(values), nil
+		}
 		elements := make(runtime.List, len(node.Elements))
 		for i, element := range node.Elements {
-			value, err := evaluateExpression(element, environment)
+			value, err := exec.evaluateExpression(element, environment)
 			if err != nil {
 				return nil, err
 			}
@@ -114,9 +132,21 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 		}
 		return elements, nil
 	case *ast.RecordLiteral:
+		if values, scheduled, err := exec.parallelItems(len(node.Fields), func(i int) ast.Expression {
+			return node.Fields[i].Value
+		}); scheduled {
+			if err != nil {
+				return nil, err
+			}
+			record := make(runtime.Record, len(node.Fields))
+			for i, field := range node.Fields {
+				record[field.Name.Name] = values[i]
+			}
+			return record, nil
+		}
 		record := make(runtime.Record, len(node.Fields))
 		for _, field := range node.Fields {
-			value, err := evaluateExpression(field.Value, environment)
+			value, err := exec.evaluateExpression(field.Value, environment)
 			if err != nil {
 				return nil, err
 			}
@@ -124,7 +154,7 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 		}
 		return record, nil
 	case *ast.FieldExpression:
-		target, err := evaluateExpression(node.Target, environment)
+		target, err := exec.evaluateExpression(node.Target, environment)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +168,7 @@ func evaluateExpression(expression ast.Expression, environment *runtime.Environm
 		}
 		return value, nil
 	case *ast.IndexExpression:
-		return evaluateIndex(node, environment)
+		return exec.evaluateIndex(node, environment)
 	default:
 		return nil, fmt.Errorf("unsupported expression %T", expression)
 	}
@@ -160,14 +190,14 @@ func pipelineCall(expression *ast.BinaryExpression) *ast.CallExpression {
 	return call
 }
 
-func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (runtime.Value, error) {
-	callee, err := evaluateExpression(call.Function, environment)
+func (exec *execution) evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (runtime.Value, error) {
+	callee, err := exec.evaluateExpression(call.Function, environment)
 	if err != nil {
 		return nil, err
 	}
 	arguments := make([]runtime.Value, len(call.Arguments))
 	for i, argument := range call.Arguments {
-		arguments[i], err = evaluateExpression(argument, environment)
+		arguments[i], err = exec.evaluateExpression(argument, environment)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +209,7 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 			return nil, fmt.Errorf("arity error at %d:%d: function expects %d arguments, got %d",
 				position.Line, position.Column, len(function.Parameters), len(arguments))
 		}
-		return invokeFunction(function, arguments)
+		return exec.invokeFunction(function, arguments)
 	case runtime.Builtin:
 		if function.Call == nil {
 			return nil, fmt.Errorf("runtime error at %d:%d: builtin %q has no implementation", position.Line, position.Column, function.Name)
@@ -195,23 +225,23 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 	}
 }
 
-func invokeFunction(function runtime.Function, arguments []runtime.Value) (runtime.Value, error) {
+func (exec *execution) invokeFunction(function runtime.Function, arguments []runtime.Value) (runtime.Value, error) {
 	scope := runtime.NewEnvironment(function.Env)
 	for i, name := range function.Parameters {
 		scope.Set(name, arguments[i])
 	}
 	if function.OptimizedBody != nil {
-		return evaluateExpression(function.OptimizedBody, scope)
+		return exec.evaluateExpression(function.OptimizedBody, scope)
 	}
-	return evaluateExpression(function.Body, scope)
+	return exec.evaluateExpression(function.Body, scope)
 }
 
-func evaluateIndex(expression *ast.IndexExpression, environment *runtime.Environment) (runtime.Value, error) {
-	target, err := evaluateExpression(expression.Target, environment)
+func (exec *execution) evaluateIndex(expression *ast.IndexExpression, environment *runtime.Environment) (runtime.Value, error) {
+	target, err := exec.evaluateExpression(expression.Target, environment)
 	if err != nil {
 		return nil, err
 	}
-	index, err := evaluateExpression(expression.Index, environment)
+	index, err := exec.evaluateExpression(expression.Index, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -259,8 +289,8 @@ func evaluateLiteral(literal *ast.Literal) (runtime.Value, error) {
 	}
 }
 
-func evaluateBinary(expression *ast.BinaryExpression, environment *runtime.Environment) (runtime.Value, error) {
-	left, err := evaluateExpression(expression.Left, environment)
+func (exec *execution) evaluateBinary(expression *ast.BinaryExpression, environment *runtime.Environment) (runtime.Value, error) {
+	left, err := exec.evaluateExpression(expression.Left, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +307,7 @@ func evaluateBinary(expression *ast.BinaryExpression, environment *runtime.Envir
 			}
 		}
 	}
-	right, err := evaluateExpression(expression.Right, environment)
+	right, err := exec.evaluateExpression(expression.Right, environment)
 	if err != nil {
 		return nil, err
 	}

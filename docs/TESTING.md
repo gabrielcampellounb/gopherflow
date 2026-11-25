@@ -25,6 +25,21 @@ pipelines com e sem otimização, incluindo a ordem dos efeitos. Os testes de
 dataflow cobrem as operações da biblioteca padrão e um pipeline CSV completo.
 O fuzzing do avaliador usa um ambiente isolado sem bindings de acesso a arquivos.
 
+## Avaliação concorrente da AST
+
+O CLI usa `EvaluateConcurrent`, que otimiza a AST antes de agendar lotes.
+O limite de workers vem de `GOMAXPROCS`. Com `GOMAXPROCS=1`, a avaliação
+ocorre em sequência. Os pontos de entrada `Evaluate` e `EvaluateIn` também
+oferecem avaliação sequencial.
+
+Listas e records com trabalho suficiente podem distribuir seus elementos ou
+campos entre workers, desde que todos sejam expressões puras que só dependam
+de bindings internos ao próprio item. Chamadas, callbacks de dataflow e
+acessos a bindings externos seguem a ordem sequencial. Os resultados dos
+workers são recolhidos pela posição original, inclusive quando mais de um
+item falha. Os testes verificam a execução simultânea, o limite do pool,
+a ordem dos resultados e erros e a ordem dos efeitos.
+
 ## Fuzzing
 
 Os seeds e os casos de regressão em `testdata/fuzz` rodam com `go test ./...`.

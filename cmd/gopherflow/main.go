@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/evaluator"
 	"github.com/gabrielcampellounb/gopherflow/internal/lexer"
@@ -33,7 +34,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	value, err := evaluator.Evaluate(evaluator.Optimize(program))
+	value, err := evaluator.EvaluateConcurrent(program, runtime.GOMAXPROCS(0))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

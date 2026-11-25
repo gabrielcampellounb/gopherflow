@@ -101,3 +101,15 @@ source(%q)
 		t.Fatalf("output=%q, %v", data, err)
 	}
 }
+
+func TestCLIConcurrentAST(t *testing.T) {
+	items := make([]string, 64)
+	for i := range items {
+		items[i] = fmt.Sprintf("let x = %d in x * 2", i)
+	}
+	source := "[" + strings.Join(items, ",") + "] |> reduce(0, fn(sum, x) => sum + x)"
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{writeProgram(t, source)}, &stdout, &stderr); status != 0 || stdout.String() != "4032\n" || stderr.Len() != 0 {
+		t.Fatalf("evaluation exited %d, stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+	}
+}

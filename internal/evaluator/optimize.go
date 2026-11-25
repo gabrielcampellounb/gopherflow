@@ -201,7 +201,7 @@ func hasOnlyLiteralElements(list *ast.ListLiteral) bool {
 // The caller proves evaluation only touches literals, including cases where
 // the evaluator short-circuits before an arbitrary right operand.
 func foldLiteral(expression ast.Expression) *ast.Literal {
-	value, err := evaluateExpression(expression, nil)
+	value, err := (&execution{}).evaluateExpression(expression, nil)
 	if err != nil {
 		return nil
 	}
