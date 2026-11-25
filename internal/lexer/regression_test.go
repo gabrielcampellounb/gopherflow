@@ -226,3 +226,41 @@ func TestStringsRejectLiteralLineEndings(t *testing.T) {
 		t.Fatalf("escaped line ending: got %v, %v", got, err)
 	}
 }
+
+func TestUTF8PositionsAndUnexpectedCharacters(t *testing.T) {
+	lexer := New("\"é😀e\u0301\" + 1")
+	first, err := lexer.Next()
+	if err != nil || first.Lexeme != "é😀e\u0301" {
+		t.Fatalf("got %v, %v", first, err)
+	}
+	operator, err := lexer.Next()
+	want := token.Position{Offset: 12, Line: 1, Column: 8}
+	if err != nil || operator.Type != token.Plus || operator.Position != want {
+		t.Fatalf("operator = %v, %v, want position %+v", operator, err, want)
+	}
+
+	for _, tt := range []struct {
+		source, message string
+		position        token.Position
+	}{
+		{"é", "unexpected character 'é'", token.Position{Line: 1, Column: 1}},
+		{"😀", "unexpected character '😀'", token.Position{Line: 1, Column: 1}},
+		{"�", "unexpected character '�'", token.Position{Line: 1, Column: 1}},
+		{"\xff", "invalid UTF-8 byte 0xff", token.Position{Line: 1, Column: 1}},
+		{`"é\😀"`, `invalid escape \😀`, token.Position{Offset: 4, Line: 1, Column: 4}},
+	} {
+		l := New(tt.source)
+		_, err := l.Next()
+		var lexicalError *Error
+		if !errors.As(err, &lexicalError) || lexicalError.Message != tt.message || lexicalError.Position != tt.position {
+			t.Errorf("Next(%q) = %v, want %q at %+v", tt.source, err, tt.message, tt.position)
+		}
+	}
+
+	lexer = New("é+")
+	_, _ = lexer.Next()
+	got, err := lexer.Next()
+	if err != nil || got.Position != (token.Position{Offset: 2, Line: 1, Column: 2}) || got.Type != token.Plus {
+		t.Fatalf("unexpected rune was not consumed exactly once: %v, %v", got, err)
+	}
+}

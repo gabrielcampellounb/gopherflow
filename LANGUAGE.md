@@ -199,7 +199,8 @@ digit =
 
 Dentro de strings, aspas e barras invertidas devem ser escapadas. Os escapes
 reconhecidos são `\"`, `\\`, `\n`, `\r` e `\t`. LF, CRLF e CR isolado contam como quebra de linha. Uma quebra de linha
-literal dentro de uma string encerra a leitura com erro.
+literal dentro de uma string encerra a leitura com erro. As colunas dos
+diagnósticos contam pontos de código Unicode, e os offsets contam bytes.
 
 ### Palavras reservadas
 
@@ -383,8 +384,10 @@ executam de forma síncrona.
 | `sink(data, path)` | Grava os records em um CSV local e retorna `null`. |
 
 `source` aceita arquivos UTF-8 com ou sem BOM. Usa a primeira linha como
-cabeçalho e exige nomes de coluna únicos e não vazios. Valores decimais finitos são lidos como `Number`. As demais
-células são lidas como `String`, inclusive células vazias. Quebras de linha
+cabeçalho e exige nomes de coluna únicos e não vazios. Uma primeira linha
+vazia é rejeitada. Um arquivo sem conteúdo produz um stream vazio. Valores
+decimais finitos são lidos como `Number`. As demais células são lidas como
+`String`, inclusive células vazias. Quebras de linha
 dentro de campos entre aspas são preservadas.
 
 `sink` exige que todas as linhas tenham os mesmos campos e que seus valores

@@ -41,6 +41,15 @@ func source(args []runtime.Value) (runtime.Value, error) {
 		// Peek guarantees these bytes are already buffered.
 		_, _ = buffered.Discard(len(csvBOM))
 	}
+	// encoding/csv skips blank lines. Reject a blank physical first line
+	// before the parser can reinterpret the next row as the header.
+	headerStart, err := buffered.Peek(2)
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("source header: %w", err)
+	}
+	if bytes.HasPrefix(headerStart, []byte("\n")) || bytes.Equal(headerStart, []byte("\r\n")) || bytes.Equal(headerStart, []byte("\r")) {
+		return nil, fmt.Errorf("source header: first line is blank")
+	}
 	reader := csv.NewReader(&quotedCRLFReader{source: buffered})
 	columns, err := reader.Read()
 	if err == io.EOF {

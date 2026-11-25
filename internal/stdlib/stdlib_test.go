@@ -289,3 +289,30 @@ func TestCSVSinkQuotesFirstHeaderWithLeadingBOM(t *testing.T) {
 		})
 	}
 }
+
+func TestCSVSourceRejectsBlankFirstLine(t *testing.T) {
+	for _, firstLine := range []string{"\n", "\r\n", "\ufeff\n", "\ufeff\r\n"} {
+		for _, rest := range []string{"", "Alice,30\nBob,40\n"} {
+			path := filepath.Join(t.TempDir(), "data.csv")
+			if err := os.WriteFile(path, []byte(firstLine+rest), 0600); err != nil {
+				t.Fatal(err)
+			}
+			value, err := source([]runtime.Value{runtime.String(path)})
+			if value != nil || err == nil || err.Error() != "source header: first line is blank" {
+				t.Errorf("first line %q, remainder %q: got %v, %v", firstLine, rest, value, err)
+			}
+		}
+	}
+}
+
+func TestCSVSourceSkipsBlankLinesAfterHeader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.csv")
+	if err := os.WriteFile(path, []byte("name\n\nAlice\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	value, err := source([]runtime.Value{runtime.String(path)})
+	want := runtime.Stream{Columns: []string{"name"}, Values: []runtime.Value{runtime.Record{"name": runtime.String("Alice")}}}
+	if err != nil || !reflect.DeepEqual(value, want) {
+		t.Fatalf("source = %v, %v, want %v", value, err, want)
+	}
+}

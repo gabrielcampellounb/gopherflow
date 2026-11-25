@@ -207,3 +207,21 @@ func TestCLIReportsLocationsInFilesWithCRLineEndings(t *testing.T) {
 		t.Fatalf("status=%d stdout=%q stderr=%q", status, stdout.String(), stderr.String())
 	}
 }
+
+func TestCLIReportsUnicodeColumnsAndRejectsBlankCSVHeader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.csv")
+	if err := os.WriteFile(path, []byte("\r\nAlice,30\r\nBob,40\r\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct{ source, want string }{
+		{`"é" + 1`, "type error at 1:5: operator + is not defined for String and Number\n"},
+		{"é", "lexer error at 1:1: unexpected character 'é'\n"},
+		{fmt.Sprintf("source(%q)", path), "runtime error at 1:7: source header: first line is blank\n"},
+	} {
+		var stdout, stderr bytes.Buffer
+		status := run([]string{writeProgram(t, tt.source)}, &stdout, &stderr)
+		if status != 1 || stdout.Len() != 0 || stderr.String() != tt.want {
+			t.Errorf("status=%d stdout=%q stderr=%q, want %q", status, stdout.String(), stderr.String(), tt.want)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package lexer
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/token"
 )
@@ -32,6 +33,14 @@ func (l *Lexer) Next() (token.Token, error) {
 	start := l.position()
 	if l.atEnd() {
 		return token.Token{Type: token.EOF, Position: start}, nil
+	}
+
+	if l.peek() >= utf8.RuneSelf {
+		ch := l.advanceRune()
+		if ch == utf8.RuneError && l.offset-start.Offset == 1 {
+			return token.Token{}, &Error{Position: start, Message: fmt.Sprintf("invalid UTF-8 byte 0x%02x", l.source[start.Offset])}
+		}
+		return token.Token{}, &Error{Position: start, Message: fmt.Sprintf("unexpected character %q", ch)}
 	}
 
 	ch := l.advance()
@@ -161,6 +170,10 @@ func (l *Lexer) readString(start token.Position) (string, error) {
 	var value strings.Builder
 	chunkStart := l.offset
 	for !l.atEnd() {
+		if l.peek() >= utf8.RuneSelf {
+			l.advanceRune()
+			continue
+		}
 		ch := l.advance()
 		switch ch {
 		case '"':
@@ -176,10 +189,10 @@ func (l *Lexer) readString(start token.Position) (string, error) {
 			}
 			value.WriteString(l.source[chunkStart : l.offset-1])
 			escapePosition := l.position()
-			escaped := l.advance()
+			escaped := l.advanceRune()
 			switch escaped {
 			case '"', '\\':
-				value.WriteByte(escaped)
+				value.WriteByte(byte(escaped))
 			case 'n':
 				value.WriteByte('\n')
 			case 'r':
@@ -214,6 +227,18 @@ func (l *Lexer) advance() byte {
 		}
 		l.column = 1
 	default:
+		l.column++
+	}
+	return ch
+}
+
+// advanceRune is called at a character boundary after checking for EOF.
+func (l *Lexer) advanceRune() rune {
+	ch, size := utf8.DecodeRuneInString(l.source[l.offset:])
+	if size == 1 {
+		l.advance()
+	} else {
+		l.offset += size
 		l.column++
 	}
 	return ch
