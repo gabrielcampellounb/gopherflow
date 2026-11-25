@@ -19,8 +19,9 @@ func (e *Error) Error() string {
 }
 
 type Parser struct {
-	lexer   *lexer.Lexer
-	current token.Token
+	lexer           *lexer.Lexer
+	current         token.Token
+	expressionDepth int
 }
 
 func New(l *lexer.Lexer) *Parser {
@@ -69,10 +70,24 @@ func (p *Parser) Parse() (*ast.Program, error) {
 	if p.current.Type != token.EOF {
 		return nil, p.errorf("expected end of input, got %s", p.current.Type)
 	}
+	for _, definition := range definitions {
+		if err := checkTreeDepth(definition.Body, 1); err != nil {
+			return nil, err
+		}
+	}
+	if err := checkTreeDepth(expression, 1); err != nil {
+		return nil, err
+	}
 	return &ast.Program{Definitions: definitions, Expressions: []ast.Expression{expression}}, nil
 }
 
 func (p *Parser) parseExpression(precedence int) (ast.Expression, error) {
+	if p.expressionDepth == maxParseDepth {
+		return nil, p.errorf("maximum expression nesting (%d) exceeded", maxParseDepth)
+	}
+	p.expressionDepth++
+	defer func() { p.expressionDepth-- }()
+
 	var left ast.Expression
 	var err error
 	needsAdvance := true

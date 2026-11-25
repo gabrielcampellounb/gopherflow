@@ -774,3 +774,47 @@ func TestRecordSyntax(t *testing.T) {
 		}
 	}
 }
+
+func TestExpressionDepthBoundaries(t *testing.T) {
+	deep := "x" + strings.Repeat(".field", maxTreeDepth-1)
+	for _, tt := range []struct {
+		name, source, want string
+	}{
+		{"supported parentheses", strings.Repeat("(", maxParseDepth-1) + "1" + strings.Repeat(")", maxParseDepth-1), ""},
+		{"excess parentheses", strings.Repeat("(", maxParseDepth) + "1" + strings.Repeat(")", maxParseDepth), "maximum expression nesting"},
+		{"supported binary depth", strings.Repeat("1+", maxTreeDepth-1) + "1", ""},
+		{"excess binary depth", strings.Repeat("1+", maxTreeDepth) + "1", "maximum AST depth"},
+		{"excess postfix depth", "x" + strings.Repeat(".field", maxTreeDepth), "maximum AST depth"},
+		{"excess index depth", "x" + strings.Repeat("[0]", maxTreeDepth), "maximum AST depth"},
+		{"excess call depth in definition", "def f() = x" + strings.Repeat("()", maxTreeDepth) + "; 0", "maximum AST depth"},
+		{"deep unary operand", "-(" + deep + ")", "maximum AST depth"},
+		{"deep let binding", "let x = " + deep + " in x", "maximum AST depth"},
+		{"deep if condition", "if " + deep + " then 1 else 2", "maximum AST depth"},
+		{"deep if branch", "if false then " + deep + " else 2", "maximum AST depth"},
+		{"deep list item", "[0, " + deep + "]", "maximum AST depth"},
+		{"deep record field", "{other: 0, field: " + deep + "}", "maximum AST depth"},
+		{"deep function body", "fn() => " + deep, "maximum AST depth"},
+		{"deep call argument", "f(" + deep + ")", "maximum AST depth"},
+		{"wide list", "[" + strings.Repeat("0,", 2*maxTreeDepth) + "0]", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			program, err := Parse(lexer.New(tt.source))
+			if tt.want != "" {
+				var syntaxError *Error
+				if program != nil || !errors.As(err, &syntaxError) || syntaxError.Position.Column < 1 ||
+					!strings.Contains(syntaxError.Message, tt.want) {
+					t.Fatalf("got program=%t, error=%v, want %q", program != nil, err, tt.want)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			rendered := program.String()
+			reparsed, err := Parse(lexer.New(rendered))
+			if err != nil || reparsed.String() != rendered {
+				t.Fatalf("accepted program failed round-trip: %v", err)
+			}
+		})
+	}
+}

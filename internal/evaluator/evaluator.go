@@ -195,6 +195,9 @@ func (exec *execution) evaluateCall(call *ast.CallExpression, environment *runti
 			return exec.invokeFunction(callback, args, position)
 		})
 		if err != nil {
+			if _, isDepthError := err.(*runtime.CallDepthError); isDepthError {
+				return nil, err
+			}
 			return nil, fmt.Errorf("runtime error at %d:%d: %w", position.Line, position.Column, err)
 		}
 		return value, nil
@@ -212,8 +215,7 @@ func (exec *execution) invokeFunction(function runtime.Function, arguments []run
 			position.Line, position.Column, len(function.Parameters), len(arguments))
 	}
 	if exec.callDepth >= maxFunctionCallDepth {
-		return nil, fmt.Errorf("runtime error at %d:%d: maximum function call depth (%d) exceeded",
-			position.Line, position.Column, maxFunctionCallDepth)
+		return nil, &runtime.CallDepthError{Position: position, Limit: maxFunctionCallDepth}
 	}
 	exec.callDepth++
 	defer func() { exec.callDepth-- }()

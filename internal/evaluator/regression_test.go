@@ -421,3 +421,37 @@ func TestExactFunctionCallDepthBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestCallbackRecursionReportsOneSourcePosition(t *testing.T) {
+	program := parallelTestProgram(t, "def loop(x) =\n  [x] |> forEach(loop);\nloop(0)")
+	value, err := EvaluateConcurrent(program, 4)
+	const want = "runtime error at 2:17: maximum function call depth (1024) exceeded"
+	if value != nil || err == nil || err.Error() != want {
+		t.Fatalf("got value=%v, matching diagnostic=%t", value, err != nil && err.Error() == want)
+	}
+}
+
+func TestNonFiniteNumbersAtDataflowAndIndexBoundaries(t *testing.T) {
+	large := "1" + strings.Repeat("0", 308)
+	for _, tt := range []struct{ expression, diagnostic string }{
+		{"[1][infinity]", "list index +Inf out of range"},
+		{"[1][-infinity]", "list index -Inf out of range"},
+		{"[1][nan]", "list index must be an integer, got NaN"},
+		{"[1] |> take(infinity)", "nonnegative integer count"},
+		{"[1] |> take(nan)", "nonnegative integer count"},
+		{"[1][-0]", ""},
+		{"[1] |> take(-0) |> reduce(1, fn(sum, x) => sum + x)", ""},
+	} {
+		program := parallelTestProgram(t, "let infinity = "+large+" * "+large+" in let nan = infinity / infinity in "+tt.expression)
+		for _, workers := range []int{1, 4} {
+			value, err := EvaluateConcurrent(program, workers)
+			if tt.diagnostic == "" {
+				if err != nil || value != runtime.Number(1) {
+					t.Errorf("%s: got %v, %v, want 1", tt.expression, value, err)
+				}
+			} else if value != nil || err == nil || !strings.Contains(err.Error(), tt.diagnostic) {
+				t.Errorf("%s: got %v, %v, want %q", tt.expression, value, err, tt.diagnostic)
+			}
+		}
+	}
+}

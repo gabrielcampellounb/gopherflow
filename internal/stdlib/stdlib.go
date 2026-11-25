@@ -109,6 +109,9 @@ func transform(name string, input runtime.Stream, initial runtime.Value, call fu
 		}
 		value, err := call(args)
 		if err != nil {
+			if _, isDepthError := err.(*runtime.CallDepthError); isDepthError {
+				return nil, err
+			}
 			return nil, fmt.Errorf("%s item %d: %w", name, i+1, err)
 		}
 		switch name {

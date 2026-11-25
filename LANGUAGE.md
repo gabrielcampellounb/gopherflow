@@ -254,6 +254,13 @@ primeiro argumento. `x |> f(a, b)` equivale a `f(x, a, b)`.
 
 ---
 
+## Limites do analisador
+
+O analisador aceita até 4.096 níveis de aninhamento da sintaxe e árvores de
+expressão com até 1.024 nós por caminho da raiz a uma folha. Cadeias longas
+de operadores ou sufixos também contam para a profundidade da árvore. O
+limite de profundidade permite listas e records largos.
+
 ## Semântica básica
 
 ### Tipagem dinâmica
