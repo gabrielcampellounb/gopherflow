@@ -4,7 +4,9 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/token"
 )
@@ -80,4 +82,28 @@ func (w *valueWriter) write(value Value) {
 	default:
 		w.text(value.Inspect())
 	}
+}
+
+// Function inspection displays source syntax, which can contain raw bytes
+// that the lexer preserves. Escape those bytes for display without changing
+// the AST's source representation or escaping existing source escapes twice.
+func escapeNonPrinting(source string) string {
+	var output strings.Builder
+	start := 0
+	for i := 0; i < len(source); {
+		ch, size := utf8.DecodeRuneInString(source[i:])
+		end := i + size
+		if !strconv.IsPrint(ch) || ch == utf8.RuneError && size == 1 {
+			output.WriteString(source[start:i])
+			quoted := strconv.Quote(source[i:end])
+			output.WriteString(quoted[1 : len(quoted)-1])
+			start = end
+		}
+		i = end
+	}
+	if start == 0 {
+		return source
+	}
+	output.WriteString(source[start:])
+	return output.String()
 }

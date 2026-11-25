@@ -229,8 +229,8 @@ func writeCSV(path string, stream runtime.Stream) error {
 		if !existing.Mode().IsRegular() {
 			return fmt.Errorf("destination %q is not a regular file", path)
 		}
-		if err := file.Chmod(existing.Mode().Perm()); err != nil {
-			return err
+		if err := preserveCSVPermissions(file, path, existing); err != nil {
+			return fmt.Errorf("preserve destination permissions: %w", err)
 		}
 	case err != nil && !errors.Is(err, os.ErrNotExist):
 		return err

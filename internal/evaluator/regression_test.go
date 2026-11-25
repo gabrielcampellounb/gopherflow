@@ -455,3 +455,16 @@ func TestNonFiniteNumbersAtDataflowAndIndexBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestNilHostBindingIsLanguageNull(t *testing.T) {
+	env := runtime.NewEnvironment(nil)
+	env.Set("host", nil)
+	value, err := EvaluateIn(parallelTestProgram(t, "host == null"), env)
+	if err != nil || value != runtime.Bool(true) {
+		t.Fatalf("nil host binding = %v, %v, want true", value, err)
+	}
+	value, err = EvaluateIn(parallelTestProgram(t, "host + 1"), env)
+	if value != nil || err == nil || err.Error() != "type error at 1:6: operator + is not defined for Null and Number" {
+		t.Fatalf("nil host binding in arithmetic = %v, %v", value, err)
+	}
+}

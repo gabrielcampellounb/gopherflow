@@ -225,3 +225,13 @@ func TestCLIReportsUnicodeColumnsAndRejectsBlankCSVHeader(t *testing.T) {
 		}
 	}
 }
+
+func TestCLIQuotesRawControlsInFunctionOutput(t *testing.T) {
+	source := "fn() => \"é\x1b\u202e\xff\\n\""
+	var stdout, stderr bytes.Buffer
+	status := run([]string{writeProgram(t, source)}, &stdout, &stderr)
+	want := `fn() => "é\x1b\u202e\xff\n"` + "\n"
+	if status != 0 || stdout.String() != want || stderr.Len() != 0 {
+		t.Fatalf("status=%d stdout=%q stderr=%q, want %q", status, stdout.String(), stderr.String(), want)
+	}
+}

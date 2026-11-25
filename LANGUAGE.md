@@ -396,7 +396,9 @@ A ordem de colunas do CSV de origem é preservada por `filter`, `take` e
 `keyBy`. Para records sem cabeçalho de origem, `sink` ordena as colunas pelo
 nome. Um stream vazio com cabeçalho grava somente o cabeçalho. A gravação
 substitui o destino após a geração bem-sucedida do CSV. Ao atualizar um
-arquivo regular existente, preserva suas permissões de acesso. Links
+arquivo regular existente, preserva os bits de permissão. No Linux, também
+preserva o proprietário, o grupo e a ACL POSIX de acesso, quando presente.
+Se a preservação falhar, o arquivo original permanece intacto. Links
 simbólicos e outros destinos existentes que não sejam arquivos regulares
 são rejeitados.
 

@@ -26,7 +26,11 @@ func (e *Environment) Get(name string) (Value, bool) {
 	return nil, false
 }
 
+// Set treats a nil Go value as the language's null value.
 func (e *Environment) Set(name string, value Value) {
+	if value == nil {
+		value = Null{}
+	}
 	if e.values == nil {
 		e.values = make(map[string]Value)
 	}
@@ -102,7 +106,7 @@ func (f Function) Inspect() string {
 	if f.Body != nil {
 		body = f.Body.String()
 	}
-	return fmt.Sprintf("fn(%s) => %s", strings.Join(f.Parameters, ", "), body)
+	return escapeNonPrinting(fmt.Sprintf("fn(%s) => %s", strings.Join(f.Parameters, ", "), body))
 }
 
 type FunctionInvoker func(Function, []Value) (Value, error)
