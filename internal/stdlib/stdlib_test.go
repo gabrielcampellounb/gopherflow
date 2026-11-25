@@ -221,3 +221,43 @@ func TestTakeReleasesDiscardedStorage(t *testing.T) {
 		t.Fatalf("take(0) retained data or dropped its columns: %+v", empty)
 	}
 }
+
+func TestCSVSinkRejectsNonRegularDestinations(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.csv")
+	if err := os.WriteFile(target, []byte("original\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rows := runtime.List{runtime.Record{"x": runtime.Number(1)}}
+	check := func(t *testing.T, path string, mode os.FileMode) {
+		t.Helper()
+		_, err := sink([]runtime.Value{rows, runtime.String(path)})
+		if err == nil || !strings.Contains(err.Error(), "is not a regular file") {
+			t.Fatalf("sink(%s) error = %v", path, err)
+		}
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode().Type() != mode {
+			t.Fatalf("sink changed the destination: %v, %v", info, err)
+		}
+	}
+	t.Run("directory", func(t *testing.T) {
+		check(t, dir, os.ModeDir)
+	})
+	t.Run("symlinks", func(t *testing.T) {
+		for _, linkTarget := range []string{target, filepath.Join(dir, "missing.csv")} {
+			path := filepath.Join(t.TempDir(), "link.csv")
+			if err := os.Symlink(linkTarget, path); err != nil {
+				t.Skipf("could not create symlink: %v", err)
+			}
+			check(t, path, os.ModeSymlink)
+			got, err := os.Readlink(path)
+			if err != nil || got != linkTarget {
+				t.Fatalf("sink changed the link target: %q, %v", got, err)
+			}
+		}
+		got, err := os.ReadFile(target)
+		if err != nil || string(got) != "original\n" {
+			t.Fatalf("sink changed the target: %q, %v", got, err)
+		}
+	})
+}

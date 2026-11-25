@@ -214,7 +214,10 @@ func writeCSV(path string, stream runtime.Stream) error {
 	// receive the existing regular file's permissions before publication.
 	existing, err := os.Lstat(path)
 	switch {
-	case err == nil && existing.Mode().IsRegular():
+	case err == nil:
+		if !existing.Mode().IsRegular() {
+			return fmt.Errorf("destination %q is not a regular file", path)
+		}
 		if err := file.Chmod(existing.Mode().Perm()); err != nil {
 			return err
 		}
