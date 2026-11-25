@@ -124,7 +124,8 @@ func (Builtin) Type() Type        { return BuiltinType }
 func (b Builtin) Inspect() string { return "<builtin " + b.Name + ">" }
 
 type Stream struct {
-	Values []Value
+	Values  []Value
+	Columns []string // Optional CSV column order, retained by row-preserving operations.
 }
 
 func (Stream) Type() Type        { return StreamType }

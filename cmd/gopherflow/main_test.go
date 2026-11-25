@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,5 +77,27 @@ func TestCLIProcess(t *testing.T) {
 		if status != tt.status || stdout.String() != tt.stdout || stderr.String() != tt.stderr {
 			t.Fatalf("CLI: %d, %q, %q", status, stdout.String(), stderr.String())
 		}
+	}
+}
+
+func TestCSVDataflowFromFile(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "data.csv")
+	output := filepath.Join(dir, "result.csv")
+	if err := os.WriteFile(input, []byte("city,temperature\nBrasilia,30\nCold,-1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	program := fmt.Sprintf(`def valid(x) = x.temperature > 0;
+source(%q)
+|> filter(valid)
+|> map(fn(x) => {city: x.city, temperature: x.temperature * 1.8 + 32})
+|> sink(%q);`, input, output)
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{writeProgram(t, program)}, &stdout, &stderr); status != 0 || stdout.String() != "null\n" || stderr.Len() != 0 {
+		t.Fatalf("pipeline exited %d, stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(output)
+	if err != nil || string(data) != "city,temperature\nBrasilia,86\n" {
+		t.Fatalf("output=%q, %v", data, err)
 	}
 }

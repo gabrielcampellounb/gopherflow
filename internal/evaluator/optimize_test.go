@@ -201,7 +201,7 @@ func TestGrammarEvaluationWithAndWithoutOptimization(t *testing.T) {
 		{"1.key", "", "type error at 1:2: Number has no fields"},
 		{"1 |> 2", "", "type error at 1:3: Number is not callable"},
 		{"missing |> absent", "", "name error at 1:12: undefined identifier \"absent\""},
-		{"take(2)", "", "runtime error at 1:5: stdlib function take is not implemented"},
+		{"take(2)", "", "runtime error at 1:5: take expects 2 arguments, got 1"},
 		{"let take = fn(x) => x + 1 in 2 |> take", "3", ""},
 	} {
 		t.Run(tt.source, func(t *testing.T) {

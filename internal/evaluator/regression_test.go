@@ -214,12 +214,13 @@ func FuzzEvaluation(f *testing.F) {
 		if err != nil {
 			return
 		}
-		a, firstErr := Evaluate(p)
+		// Keep fuzz inputs isolated from filesystem-backed standard bindings.
+		a, firstErr := EvaluateIn(p, runtime.NewEnvironment(nil))
 		optimized := Optimize(p)
 		if Optimize(optimized) != optimized {
 			t.Fatal("optimization did not reach a fixed point")
 		}
-		b, secondErr := Evaluate(optimized)
+		b, secondErr := EvaluateIn(optimized, runtime.NewEnvironment(nil))
 		if (firstErr == nil) != (secondErr == nil) {
 			t.Fatalf("optimization changed error from %v to %v", firstErr, secondErr)
 		}

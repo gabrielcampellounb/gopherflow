@@ -334,21 +334,36 @@ xs[0]
 
 ## Biblioteca padrão de dataflow
 
-A biblioteca padrão deverá fornecer, inicialmente:
+Os nomes de dataflow são bindings comuns do ambiente padrão. Operações sobre
+dados aceitam `List` ou `Stream` e percorrem os elementos na ordem de entrada.
+Nesta implementação, os streams são materializados em memória e as operações
+executam de forma síncrona.
 
-```text
-source
-map
-filter
-flatMap
-take
-keyBy
-reduce
-forEach
-sink
-```
+| Operação | Resultado |
+|---|---|
+| `source(path)` | Stream de records lidos de um CSV local. |
+| `map(data, f)` | Stream com o resultado de `f(item)` para cada item. |
+| `filter(data, f)` | Stream com os itens para os quais `f(item)` retorna `true`. O retorno deve ser `Bool`. |
+| `flatMap(data, f)` | Stream com os elementos das listas ou streams retornados por `f(item)`, concatenados em ordem. |
+| `take(data, n)` | Stream com até os primeiros `n` itens. `n` deve ser um inteiro não negativo. |
+| `keyBy(data, f)` | Record que associa cada chave `String` retornada por `f(item)` ao stream de itens dessa chave. |
+| `reduce(data, initial, f)` | Resultado de aplicar `f(acumulador, item)` sucessivamente. Em uma entrada vazia, retorna `initial`. |
+| `forEach(data, f)` | Executa `f(item)` pela ordem de entrada e retorna `null`. |
+| `sink(data, path)` | Grava os records em um CSV local e retorna `null`. |
 
-Esses nomes são bindings comuns do ambiente padrão, não construções especiais do parser.
+`source` usa a primeira linha como cabeçalho e exige nomes de coluna únicos
+e não vazios. Valores decimais finitos são lidos como `Number`. As demais
+células são lidas como `String`, inclusive células vazias.
+
+`sink` exige que todas as linhas tenham os mesmos campos e que seus valores
+sejam `String`, `Number`, `Bool` ou `Null`. Valores `Null` viram células vazias.
+A ordem de colunas do CSV de origem é preservada por `filter`, `take` e
+`keyBy`. Para records sem cabeçalho de origem, `sink` ordena as colunas pelo
+nome. Um stream vazio com cabeçalho grava somente o cabeçalho. A gravação
+substitui o destino após a geração bem-sucedida do CSV.
+
+Erros de callbacks interrompem a operação e indicam a posição do item na
+entrada, começando em 1.
 
 ---
 

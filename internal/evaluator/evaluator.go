@@ -13,7 +13,7 @@ import (
 
 func Evaluate(program *ast.Program) (runtime.Value, error) {
 	environment := runtime.NewEnvironment(nil)
-	for name, value := range *stdlib.Environment() {
+	for name, value := range *stdlib.Environment(invokeFunction) {
 		environment.Set(name, value)
 	}
 	return EvaluateIn(program, environment)
@@ -179,14 +179,7 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 			return nil, fmt.Errorf("arity error at %d:%d: function expects %d arguments, got %d",
 				position.Line, position.Column, len(function.Parameters), len(arguments))
 		}
-		scope := runtime.NewEnvironment(function.Env)
-		for i, name := range function.Parameters {
-			scope.Set(name, arguments[i])
-		}
-		if function.OptimizedBody != nil {
-			return evaluateExpression(function.OptimizedBody, scope)
-		}
-		return evaluateExpression(function.Body, scope)
+		return invokeFunction(function, arguments)
 	case runtime.Builtin:
 		if function.Call == nil {
 			return nil, fmt.Errorf("runtime error at %d:%d: builtin %q has no implementation", position.Line, position.Column, function.Name)
@@ -200,6 +193,17 @@ func evaluateCall(call *ast.CallExpression, environment *runtime.Environment) (r
 		return nil, fmt.Errorf("type error at %d:%d: %s is not callable",
 			position.Line, position.Column, callee.Type())
 	}
+}
+
+func invokeFunction(function runtime.Function, arguments []runtime.Value) (runtime.Value, error) {
+	scope := runtime.NewEnvironment(function.Env)
+	for i, name := range function.Parameters {
+		scope.Set(name, arguments[i])
+	}
+	if function.OptimizedBody != nil {
+		return evaluateExpression(function.OptimizedBody, scope)
+	}
+	return evaluateExpression(function.Body, scope)
 }
 
 func evaluateIndex(expression *ast.IndexExpression, environment *runtime.Environment) (runtime.Value, error) {

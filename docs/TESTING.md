@@ -21,9 +21,9 @@ teste paralelo; isso não implica que um Environment mutável possa ser escrito
 simultaneamente por várias goroutines.
 
 Os testes de conformidade exercitam records, acesso a campos, chamadas e
-pipelines com e sem otimização, incluindo a ordem dos efeitos. A biblioteca
-padrão registra os nomes de dataflow e retorna erros explícitos ao chamar
-operações cuja execução ainda está pendente.
+pipelines com e sem otimização, incluindo a ordem dos efeitos. Os testes de
+dataflow cobrem as operações da biblioteca padrão e um pipeline CSV completo.
+O fuzzing do avaliador usa um ambiente isolado sem bindings de acesso a arquivos.
 
 ## Fuzzing
 
