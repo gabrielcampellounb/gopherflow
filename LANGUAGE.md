@@ -372,8 +372,8 @@ executam de forma síncrona.
 | `forEach(data, f)` | Executa `f(item)` pela ordem de entrada e retorna `null`. |
 | `sink(data, path)` | Grava os records em um CSV local e retorna `null`. |
 
-`source` usa a primeira linha como cabeçalho e exige nomes de coluna únicos
-e não vazios. Valores decimais finitos são lidos como `Number`. As demais
+`source` aceita arquivos UTF-8 com ou sem BOM. Usa a primeira linha como
+cabeçalho e exige nomes de coluna únicos e não vazios. Valores decimais finitos são lidos como `Number`. As demais
 células são lidas como `String`, inclusive células vazias.
 
 `sink` exige que todas as linhas tenham os mesmos campos e que seus valores

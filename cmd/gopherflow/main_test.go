@@ -137,3 +137,30 @@ func TestCLIReportsOutputFailure(t *testing.T) {
 		t.Fatalf("write failure exited %d, stderr=%q", status, stderr.String())
 	}
 }
+
+func TestCSVEmptyPipelinePreservesHeader(t *testing.T) {
+	for _, tt := range []struct{ name, data, stage, want string }{
+		{"header only", "z,a\n", "", "z,a\n"},
+		{"take zero", "z,a\n1,2\n", " |> take(0)", "z,a\n"},
+		{"filter all", "z,a\n1,2\n", " |> filter(fn(row) => false)", "z,a\n"},
+		{"empty file", "", " |> take(0)", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "input.csv")
+			output := filepath.Join(dir, "output.csv")
+			if err := os.WriteFile(path, []byte(tt.data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			program := fmt.Sprintf("source(%q)%s |> sink(%q)", path, tt.stage, output)
+			var stdout, stderr bytes.Buffer
+			if status := run([]string{writeProgram(t, program)}, &stdout, &stderr); status != 0 || stdout.String() != "null\n" || stderr.Len() != 0 {
+				t.Fatalf("pipeline exited %d, stdout=%q stderr=%q", status, stdout.String(), stderr.String())
+			}
+			got, err := os.ReadFile(output)
+			if err != nil || string(got) != tt.want {
+				t.Fatalf("output=%q, %v, want %q", got, err, tt.want)
+			}
+		})
+	}
+}

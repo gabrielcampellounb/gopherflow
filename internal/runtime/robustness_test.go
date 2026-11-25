@@ -50,3 +50,23 @@ func TestInspectionDeterminismAndPurity(t *testing.T) {
 		t.Fatal("inspection mutated values")
 	}
 }
+
+func TestEnvironmentEmptyAndDeepScopes(t *testing.T) {
+	var absent *Environment
+	if value, found := absent.Get("x"); found || value != nil {
+		t.Fatalf("nil scope returned %v, %t", value, found)
+	}
+	var root Environment
+	root.Set("x", Number(1))
+	scope := &root
+	for range 4096 {
+		scope = NewEnvironment(scope)
+	}
+	if value, found := scope.Get("x"); !found || value != Number(1) {
+		t.Fatalf("deep lookup returned %v, %t", value, found)
+	}
+	scope.Set("x", Number(2))
+	if outer, _ := root.Get("x"); outer != Number(1) {
+		t.Fatalf("shadowing changed root: %v", outer)
+	}
+}

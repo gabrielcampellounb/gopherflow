@@ -107,3 +107,33 @@ func TestCSVValidationAndEmptyRows(t *testing.T) {
 		t.Fatalf("empty cells disappeared: %#v, %v", value, err)
 	}
 }
+
+func TestCSVSourceUTF8BOM(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		data string
+		want runtime.Stream
+	}{
+		{"quoted header with CRLF", "\ufeff\"city\",temperature\r\n\ufeffBrasília,30\r\n", runtime.Stream{
+			Columns: []string{"city", "temperature"},
+			Values: []runtime.Value{
+				runtime.Record{"city": runtime.String("\ufeffBrasília"), "temperature": runtime.Number(30)},
+			},
+		}},
+		{"unquoted header", "\ufeffcity\n", runtime.Stream{Columns: []string{"city"}}},
+		{"BOM only", "\ufeff", runtime.Stream{}},
+		{"empty file", "", runtime.Stream{}},
+		{"short header", "x", runtime.Stream{Columns: []string{"x"}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "data.csv")
+			if err := os.WriteFile(path, []byte(tt.data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := source([]runtime.Value{runtime.String(path)})
+			if err != nil || !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("source = %#v, %v, want %#v", got, err, tt.want)
+			}
+		})
+	}
+}

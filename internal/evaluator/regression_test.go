@@ -385,3 +385,39 @@ func TestEscapedClosuresUseCurrentExecution(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluationWithoutEnvironmentAndBuiltinWithoutValue(t *testing.T) {
+	program := parallelTestProgram(t, "missing")
+	if value, err := EvaluateIn(program, nil); value != nil || err == nil || !strings.Contains(err.Error(), "undefined identifier") {
+		t.Fatalf("empty environment returned %v, %v", value, err)
+	}
+	environment := runtime.NewEnvironment(nil)
+	environment.Set("bad", runtime.Builtin{
+		Name: "bad",
+		Call: func([]runtime.Value) (runtime.Value, error) { return nil, nil },
+	})
+	program = parallelTestProgram(t, "bad() + 1")
+	if value, err := EvaluateIn(program, environment); value != nil || err == nil || err.Error() != `runtime error at 1:4: builtin "bad" returned no value` {
+		t.Fatalf("invalid builtin returned %v, %v", value, err)
+	}
+}
+
+func TestExactFunctionCallDepthBoundary(t *testing.T) {
+	program := parallelTestProgram(t, "def count(n) = if n <= 1 then 1 else 1 + count(n - 1); count(limit)")
+	for _, workers := range []int{1, 4} {
+		run := &execution{workerLimit: workers}
+		t.Cleanup(run.close)
+		env := runtime.NewEnvironment(nil)
+		for _, limit := range []int{maxFunctionCallDepth, maxFunctionCallDepth + 1, 1} {
+			env.Set("limit", runtime.Number(limit))
+			result, err := run.evaluateProgram(program, env)
+			if limit > maxFunctionCallDepth {
+				if result != nil || err == nil || !strings.Contains(err.Error(), "maximum function call depth") {
+					t.Fatalf("workers=%d, limit=%d: expected depth error, got %v, %v", workers, limit, result, err)
+				}
+			} else if err != nil || result != runtime.Number(limit) {
+				t.Fatalf("workers=%d, limit=%d: got %v, %v", workers, limit, result, err)
+			}
+		}
+	}
+}

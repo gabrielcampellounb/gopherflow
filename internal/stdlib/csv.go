@@ -1,6 +1,7 @@
 package stdlib
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -26,7 +27,17 @@ func source(args []runtime.Value) (runtime.Value, error) {
 		return nil, fmt.Errorf("source: %w", err)
 	}
 	defer file.Close()
-	reader := csv.NewReader(file)
+	buffered := bufio.NewReader(file)
+	const bom = "\xef\xbb\xbf"
+	prefix, err := buffered.Peek(len(bom))
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("source header: %w", err)
+	}
+	if string(prefix) == bom {
+		// Peek guarantees these bytes are already buffered.
+		_, _ = buffered.Discard(len(bom))
+	}
+	reader := csv.NewReader(buffered)
 	columns, err := reader.Read()
 	if err == io.EOF {
 		return runtime.Stream{}, nil

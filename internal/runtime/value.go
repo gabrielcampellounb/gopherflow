@@ -19,17 +19,18 @@ func NewEnvironment(parent *Environment) *Environment {
 }
 
 func (e *Environment) Get(name string) (Value, bool) {
-	value, ok := e.values[name]
-	if ok {
-		return value, true
-	}
-	if e.parent != nil {
-		return e.parent.Get(name)
+	for scope := e; scope != nil; scope = scope.parent {
+		if value, ok := scope.values[name]; ok {
+			return value, true
+		}
 	}
 	return nil, false
 }
 
 func (e *Environment) Set(name string, value Value) {
+	if e.values == nil {
+		e.values = make(map[string]Value)
+	}
 	e.values[name] = value
 }
 
@@ -131,13 +132,23 @@ type Builtin struct {
 }
 
 func (b Builtin) Invoke(args []Value, invoke FunctionInvoker) (Value, error) {
-	if b.CallWith != nil {
-		return b.CallWith(args, invoke)
+	var value Value
+	var err error
+	switch {
+	case b.CallWith != nil:
+		value, err = b.CallWith(args, invoke)
+	case b.Call != nil:
+		value, err = b.Call(args)
+	default:
+		return nil, fmt.Errorf("builtin %q has no implementation", b.Name)
 	}
-	if b.Call != nil {
-		return b.Call(args)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("builtin %q has no implementation", b.Name)
+	if value == nil {
+		return nil, fmt.Errorf("builtin %q returned no value", b.Name)
+	}
+	return value, nil
 }
 
 func (Builtin) Type() Type        { return BuiltinType }
