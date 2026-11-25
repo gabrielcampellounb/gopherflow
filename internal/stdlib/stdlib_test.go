@@ -137,3 +137,87 @@ func TestCSVSourceUTF8BOM(t *testing.T) {
 		})
 	}
 }
+
+func TestCSVPreservesLineBreaksWithinQuotedFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record.csv")
+	long := strings.Repeat("x", 8191)
+	// The quoted fields span physical lines and contain escaped quotes and CRLF.
+	data := "\"meta\r\ndata\",plain\r\n\"" + long + "\"\"a\r\nb\nc\rd\r\r\ne\",other\r\nlast,value"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := source([]runtime.Value{runtime.String(path)})
+	want := runtime.Stream{
+		Columns: []string{"meta\r\ndata", "plain"},
+		Values: []runtime.Value{
+			runtime.Record{"meta\r\ndata": runtime.String(long + "\"a\r\nb\nc\rd\r\r\ne"), "plain": runtime.String("other")},
+			runtime.Record{"meta\r\ndata": runtime.String("last"), "plain": runtime.String("value")},
+		},
+	}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("CSV did not preserve the field values: %v", err)
+	}
+	output := filepath.Join(t.TempDir(), "roundtrip.csv")
+	if _, err := sink([]runtime.Value{got, runtime.String(output)}); err != nil {
+		t.Fatal(err)
+	}
+	roundtrip, err := source([]runtime.Value{runtime.String(output)})
+	if err != nil || !reflect.DeepEqual(roundtrip, want) {
+		t.Fatalf("CSV round-trip changed the fields: %v", err)
+	}
+}
+
+func TestCSVSinkPreservesExistingPermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.csv")
+	if err := os.WriteFile(path, []byte("old\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0640); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := runtime.List{runtime.Record{"total": runtime.Number(1)}}
+	if _, err := sink([]runtime.Value{rows, runtime.String(path)}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Mode().Perm() != before.Mode().Perm() {
+		t.Fatalf("sink changed permissions from %o to %o", before.Mode().Perm(), after.Mode().Perm())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "total\n1\n" {
+		t.Fatalf("sink wrote %q, %v", data, err)
+	}
+}
+
+func TestTakeReleasesDiscardedStorage(t *testing.T) {
+	input := runtime.Stream{
+		Columns: []string{"value"},
+		Values:  make([]runtime.Value, 100),
+	}
+	input.Values[0] = runtime.Number(7)
+	got, err := take([]runtime.Value{input, runtime.Number(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := got.(runtime.Stream)
+	input.Values[0] = runtime.Number(9)
+	if len(stream.Values) != 1 || stream.Values[0] != runtime.Number(7) || !reflect.DeepEqual(stream.Columns, input.Columns) {
+		t.Fatalf("take returned a shared prefix or changed the columns: %v", stream.Values)
+	}
+
+	got, err = take([]runtime.Value{input, runtime.Number(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := got.(runtime.Stream)
+	if empty.Values != nil || !reflect.DeepEqual(empty.Columns, input.Columns) {
+		t.Fatalf("take(0) retained data or dropped its columns: %+v", empty)
+	}
+}

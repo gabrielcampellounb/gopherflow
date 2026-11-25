@@ -127,11 +127,15 @@ type FunctionInvoker func(Function, []Value) (Value, error)
 
 type Builtin struct {
 	Name     string
+	Arity    *int // Nil when an externally provided builtin has no fixed arity.
 	Call     func([]Value) (Value, error)
 	CallWith func([]Value, FunctionInvoker) (Value, error)
 }
 
 func (b Builtin) Invoke(args []Value, invoke FunctionInvoker) (Value, error) {
+	if b.Arity != nil && len(args) != *b.Arity {
+		return nil, fmt.Errorf("%s expects %d arguments, got %d", b.Name, *b.Arity, len(args))
+	}
 	var value Value
 	var err error
 	switch {

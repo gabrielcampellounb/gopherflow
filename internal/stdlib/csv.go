@@ -2,7 +2,9 @@ package stdlib
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -37,7 +39,7 @@ func source(args []runtime.Value) (runtime.Value, error) {
 		// Peek guarantees these bytes are already buffered.
 		_, _ = buffered.Discard(len(bom))
 	}
-	reader := csv.NewReader(buffered)
+	reader := csv.NewReader(&quotedCRLFReader{source: buffered})
 	columns, err := reader.Read()
 	if err == io.EOF {
 		return runtime.Stream{}, nil
@@ -67,6 +69,52 @@ func source(args []runtime.Value) (runtime.Value, error) {
 		}
 		stream.Values = append(stream.Values, record)
 	}
+}
+
+// encoding/csv removes the CR in every CRLF sequence, including inside
+// quoted fields. Add an extra CR only inside fields so the parser's
+// normalization leaves the original bytes intact.
+type quotedCRLFReader struct {
+	source   *bufio.Reader
+	pending  []byte
+	readErr  error
+	inQuotes bool
+}
+
+func (r *quotedCRLFReader) Read(dst []byte) (int, error) {
+	if len(dst) == 0 {
+		return 0, nil
+	}
+	if len(r.pending) == 0 {
+		if r.readErr != nil {
+			err := r.readErr
+			r.readErr = nil
+			return 0, err
+		}
+		line, err := r.source.ReadSlice('\n')
+		if err == bufio.ErrBufferFull {
+			line = bytes.Clone(line)
+			var rest []byte
+			rest, err = r.source.ReadBytes('\n')
+			line = append(line, rest...)
+		}
+		if len(line) == 0 {
+			return 0, err
+		}
+		r.readErr = err
+		// Each escaped quote is a pair and therefore does not change parity.
+		if bytes.Count(line, []byte{'"'})%2 != 0 {
+			r.inQuotes = !r.inQuotes
+		}
+		if r.inQuotes && bytes.HasSuffix(line, []byte("\r\n")) {
+			// ReadSlice may alias bytes belonging to the next line.
+			line = append(bytes.Clone(line[:len(line)-1]), '\r', '\n')
+		}
+		r.pending = line
+	}
+	n := copy(dst, r.pending)
+	r.pending = r.pending[n:]
+	return n, nil
 }
 
 func csvValue(field string) runtime.Value {
@@ -160,6 +208,17 @@ func writeCSV(path string, stream runtime.Stream) error {
 	}
 	writer.Flush()
 	if err := writer.Error(); err != nil {
+		return err
+	}
+	// Rename replaces the destination inode, so the temporary file must
+	// receive the existing regular file's permissions before publication.
+	existing, err := os.Lstat(path)
+	switch {
+	case err == nil && existing.Mode().IsRegular():
+		if err := file.Chmod(existing.Mode().Perm()); err != nil {
+			return err
+		}
+	case err != nil && !errors.Is(err, os.ErrNotExist):
 		return err
 	}
 	if err := file.Close(); err != nil {

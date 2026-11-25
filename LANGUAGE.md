@@ -381,14 +381,16 @@ executam de forma síncrona.
 
 `source` aceita arquivos UTF-8 com ou sem BOM. Usa a primeira linha como
 cabeçalho e exige nomes de coluna únicos e não vazios. Valores decimais finitos são lidos como `Number`. As demais
-células são lidas como `String`, inclusive células vazias.
+células são lidas como `String`, inclusive células vazias. Quebras de linha
+dentro de campos entre aspas são preservadas.
 
 `sink` exige que todas as linhas tenham os mesmos campos e que seus valores
 sejam `String`, `Number`, `Bool` ou `Null`. Valores `Null` viram células vazias.
 A ordem de colunas do CSV de origem é preservada por `filter`, `take` e
 `keyBy`. Para records sem cabeçalho de origem, `sink` ordena as colunas pelo
 nome. Um stream vazio com cabeçalho grava somente o cabeçalho. A gravação
-substitui o destino após a geração bem-sucedida do CSV.
+substitui o destino após a geração bem-sucedida do CSV. Ao atualizar um
+arquivo regular existente, preserva suas permissões de acesso.
 
 Erros de callbacks interrompem a operação e indicam a posição do item na
 entrada, começando em 1.

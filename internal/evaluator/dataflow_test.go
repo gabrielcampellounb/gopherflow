@@ -95,3 +95,22 @@ func TestRecordIndexAndCollectionEquality(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeCallbackArityIsValidatedBeforeReadingItems(t *testing.T) {
+	for _, tt := range []struct{ source, want string }{
+		{"[] |> map(sink)", "map: callback must accept 1 arguments, sink expects 2"},
+		{"[[]] |> map(sink)", "map: callback must accept 1 arguments, sink expects 2"},
+		{"[] |> reduce(0, source)", "reduce: callback must accept 2 arguments, source expects 1"},
+		{"[] |> map(source)", ""},
+	} {
+		program := parallelTestProgram(t, tt.source)
+		value, err := EvaluateConcurrent(program, 4)
+		if tt.want == "" {
+			if err != nil || value.Inspect() != "<stream len=0>" {
+				t.Errorf("%s: got %v, %v, want an empty stream", tt.source, value, err)
+			}
+		} else if value != nil || err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%s: got %v, %v, want %q", tt.source, value, err, tt.want)
+		}
+	}
+}

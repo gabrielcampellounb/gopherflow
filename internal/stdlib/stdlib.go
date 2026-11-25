@@ -3,6 +3,7 @@ package stdlib
 import (
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
 )
@@ -11,12 +12,7 @@ import (
 func Environment() *runtime.Record {
 	bindings := make(runtime.Record)
 	register := func(name string, arity int, call func([]runtime.Value, runtime.FunctionInvoker) (runtime.Value, error)) {
-		bindings[name] = runtime.Builtin{Name: name, CallWith: func(args []runtime.Value, invoke runtime.FunctionInvoker) (runtime.Value, error) {
-			if len(args) != arity {
-				return nil, fmt.Errorf("%s expects %d arguments, got %d", name, arity, len(args))
-			}
-			return call(args, invoke)
-		}}
+		bindings[name] = runtime.Builtin{Name: name, Arity: &arity, CallWith: call}
 	}
 	registerSimple := func(name string, arity int, call func([]runtime.Value) (runtime.Value, error)) {
 		register(name, arity, func(args []runtime.Value, _ runtime.FunctionInvoker) (runtime.Value, error) {
@@ -70,6 +66,9 @@ func prepareCallback(value runtime.Value, arity int, invoke runtime.FunctionInvo
 		return func(args []runtime.Value) (runtime.Value, error) { return invoke(function, args) }, nil
 	case runtime.Builtin:
 		if function.Call != nil || function.CallWith != nil {
+			if function.Arity != nil && *function.Arity != arity {
+				return nil, fmt.Errorf("callback must accept %d arguments, %s expects %d", arity, function.Name, *function.Arity)
+			}
 			return func(args []runtime.Value) (runtime.Value, error) { return function.Invoke(args, invoke) }, nil
 		}
 	}
@@ -86,8 +85,10 @@ func take(args []runtime.Value) (runtime.Value, error) {
 	if !ok || math.IsInf(n, 0) || n < 0 || n != math.Trunc(n) {
 		return nil, fmt.Errorf("take expects a nonnegative integer count")
 	}
-	if n < float64(len(stream.Values)) {
-		stream.Values = stream.Values[:int(n):int(n)]
+	if n == 0 {
+		stream.Values = nil
+	} else if n < float64(len(stream.Values)) {
+		stream.Values = slices.Clone(stream.Values[:int(n)])
 	}
 	return stream, nil
 }
