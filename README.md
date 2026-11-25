@@ -5,28 +5,20 @@ funcional orientada a fluxos de dados. O projeto ainda está em desenvolvimento.
 
 ## Estado atual
 
-A base implementa:
+O interpretador implementa:
 
-- análise léxica com posição de linha e coluna;
-- análise de uma expressão por entrada;
-- árvore sintática abstrata (AST);
-- valores `Number`, `String`, `Bool` e `Null`;
-- vínculos imutáveis com `let ... in ...`;
-- expressões condicionais com `if ... then ... else ...`;
+- análise léxica e sintática com posição de linha e coluna;
+- valores `Number`, `String`, `Bool`, `Null`, listas e registros;
+- vínculos imutáveis, expressões condicionais, funções e chamadas recursivas;
 - operadores aritméticos, relacionais, de igualdade e lógicos;
 - curto-circuito para `and` e `or`;
+- execução de arquivos e pipelines com leitura e gravação de CSV;
+- otimização da AST e avaliação concorrente de expressões independentes;
 - testes unitários, de regressão, fuzzing e corrida de dados.
 
-Ainda não estão disponíveis:
-
-- execução de arquivos ou leitura interativa pelo programa de linha de comando;
-- funções, chamadas, listas e registros no avaliador;
-- execução do operador de fluxo `|>`;
-- funções da biblioteca padrão (`source`, `map`, `filter` e `sink`);
-- processamento concorrente de fluxos.
-
-A sintaxe planejada está descrita em [LANGUAGE.md](./LANGUAGE.md). Esse documento
-inclui recursos que ainda não foram implementados.
+As operações da biblioteca padrão materializam os fluxos em memória e
+executam seus estágios de forma síncrona. O CLI aceita um arquivo por
+invocação. A gramática e a semântica estão em [LANGUAGE.md](./LANGUAGE.md).
 
 ## Requisitos
 
@@ -36,21 +28,15 @@ inclui recursos que ainda não foram implementados.
 
 ## Uso
 
-Compile o programa:
+Compile o programa e execute o exemplo:
 
 ```sh
 make build
-./bin/gopherflow
+./bin/gopherflow examples/hello.gf
 ```
 
-No estado atual, o programa avalia internamente a expressão `null` e imprime:
-
-```text
-null
-```
-
-Qualquer argumento é recusado porque a execução de arquivos ainda não foi
-implementada.
+O exemplo imprime `"Olá, mundo"`. Sem argumentos, o programa avalia a
+expressão `null`.
 
 ## Exemplo da linguagem
 
@@ -59,8 +45,8 @@ let temperatura = 31.5 in
     if temperatura > 30 then "quente" else "amena";
 ```
 
-O exemplo representa a sintaxe já aceita pelo analisador, mas ainda não pode ser
-executado diretamente pelo programa de linha de comando.
+Salve a expressão em um arquivo `.gf` e passe seu caminho ao CLI para obter
+`"quente"`.
 
 ## Estrutura do projeto
 
@@ -72,7 +58,7 @@ internal/ast/         nós da árvore sintática
 internal/parser/      análise sintática e precedência de operadores
 internal/evaluator/   avaliação de expressões e ambientes léxicos
 internal/runtime/     valores usados durante a execução
-internal/stdlib/      funções padrão ainda não implementadas
+internal/stdlib/      operações de fluxo de dados e CSV
 docs/                 documentação de validação
 examples/             exemplos de código GopherFlow
 ```

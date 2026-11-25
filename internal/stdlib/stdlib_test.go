@@ -1,29 +1,318 @@
 package stdlib
 
 import (
-	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
 )
 
-func TestPlaceholdersAreExplicitAndIndependent(t *testing.T) {
+func TestStandardBindings(t *testing.T) {
 	env := Environment()
-	if env == nil || len(*env) != 4 {
+	if len(*env) != 9 {
 		t.Fatalf("unexpected environment: %v", env)
 	}
-	for _, name := range []string{"source", "map", "filter", "sink"} {
-		b, ok := (*env)[name].(runtime.Builtin)
-		if !ok || b.Name != name || b.Call == nil {
+	for _, name := range []string{"source", "map", "filter", "flatMap", "take", "keyBy", "reduce", "forEach", "sink"} {
+		builtin, ok := (*env)[name].(runtime.Builtin)
+		if !ok || builtin.Name != name || builtin.CallWith == nil {
 			t.Fatalf("invalid builtin %q: %#v", name, (*env)[name])
 		}
-		for _, args := range [][]runtime.Value{nil, {}, {runtime.Number(1), runtime.String("x")}} {
-			got, err := b.Call(args)
-			if got != nil || err == nil || err.Error() != "stdlib function "+name+" is not implemented" {
-				t.Fatalf("%s: got %v, %v", name, got, err)
-			}
+		if result, err := builtin.Invoke(nil, nil); result != nil || err == nil {
+			t.Fatalf("%s accepted zero arguments: %v, %v", name, result, err)
 		}
 	}
 	delete(*env, "map")
 	if _, ok := (*Environment())["map"]; !ok {
 		t.Fatal("environments share mutable bindings")
+	}
+}
+
+func TestCSVSourceAndSink(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input.csv")
+	output := filepath.Join(dir, "output.csv")
+	data := "temperature,city\n31.5,\"Brasilia, DF\"\n-2,\"Two\nlines\"\n"
+	if err := os.WriteFile(input, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	value, err := source([]runtime.Value{runtime.String(input)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := runtime.Stream{Columns: []string{"temperature", "city"}, Values: []runtime.Value{
+		runtime.Record{"temperature": runtime.Number(31.5), "city": runtime.String("Brasilia, DF")},
+		runtime.Record{"temperature": runtime.Number(-2), "city": runtime.String("Two\nlines")},
+	}}
+	if !reflect.DeepEqual(value, want) {
+		t.Fatalf("source = %#v, want %#v", value, want)
+	}
+	if _, err := sink([]runtime.Value{value, runtime.String(output)}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(output)
+	if err != nil || string(got) != data {
+		t.Fatalf("sink wrote %q, %v, want %q", got, err, data)
+	}
+}
+
+func TestCSVSinkPreservesDestinationOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "output.csv")
+	if err := os.WriteFile(path, []byte("original"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, rows := range []runtime.List{
+		{runtime.Record{"a": runtime.Number(1)}, runtime.Record{"b": runtime.Number(2)}},
+		{runtime.Record{"a": runtime.List{}}},
+		{runtime.Record{"a": runtime.Number(1)}, runtime.Number(2)},
+	} {
+		if _, err := sink([]runtime.Value{rows, runtime.String(path)}); err == nil {
+			t.Fatalf("sink accepted %v", rows)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil || string(got) != "original" {
+			t.Fatalf("destination changed: %q, %v", got, err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary files left over: %v, %v", entries, err)
+	}
+}
+
+func TestCSVValidationAndEmptyRows(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "file.csv")
+	for _, tt := range []struct{ data, errorText string }{
+		{"a,a\n1,2\n", "duplicate CSV column"},
+		{"a,\n1,2\n", "empty or duplicate CSV column"},
+		{"a,b\n1\n", "wrong number of fields"},
+		{"\"open\n", "source header"},
+	} {
+		if err := os.WriteFile(path, []byte(tt.data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := source([]runtime.Value{runtime.String(path)}); err == nil || !strings.Contains(err.Error(), tt.errorText) {
+			t.Errorf("source(%q): %v", tt.data, err)
+		}
+	}
+	rows := runtime.List{runtime.Record{"a": runtime.Null{}}, runtime.Record{"a": runtime.String("")}}
+	if _, err := sink([]runtime.Value{rows, runtime.String(path)}); err != nil {
+		t.Fatal(err)
+	}
+	value, err := source([]runtime.Value{runtime.String(path)})
+	if err != nil || len(value.(runtime.Stream).Values) != 2 {
+		t.Fatalf("empty cells disappeared: %#v, %v", value, err)
+	}
+}
+
+func TestCSVSourceUTF8BOM(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		data string
+		want runtime.Stream
+	}{
+		{"quoted header with CRLF", "\ufeff\"city\",temperature\r\n\ufeffBrasília,30\r\n", runtime.Stream{
+			Columns: []string{"city", "temperature"},
+			Values: []runtime.Value{
+				runtime.Record{"city": runtime.String("\ufeffBrasília"), "temperature": runtime.Number(30)},
+			},
+		}},
+		{"unquoted header", "\ufeffcity\n", runtime.Stream{Columns: []string{"city"}}},
+		{"BOM only", "\ufeff", runtime.Stream{}},
+		{"empty file", "", runtime.Stream{}},
+		{"short header", "x", runtime.Stream{Columns: []string{"x"}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "data.csv")
+			if err := os.WriteFile(path, []byte(tt.data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := source([]runtime.Value{runtime.String(path)})
+			if err != nil || !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("source = %#v, %v, want %#v", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCSVPreservesLineBreaksWithinQuotedFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "record.csv")
+	long := strings.Repeat("x", 8191)
+	// The quoted fields span physical lines and contain escaped quotes and CRLF.
+	data := "\"meta\r\ndata\",plain\r\n\"" + long + "\"\"a\r\nb\nc\rd\r\r\ne\",other\r\nlast,value"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := source([]runtime.Value{runtime.String(path)})
+	want := runtime.Stream{
+		Columns: []string{"meta\r\ndata", "plain"},
+		Values: []runtime.Value{
+			runtime.Record{"meta\r\ndata": runtime.String(long + "\"a\r\nb\nc\rd\r\r\ne"), "plain": runtime.String("other")},
+			runtime.Record{"meta\r\ndata": runtime.String("last"), "plain": runtime.String("value")},
+		},
+	}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("CSV did not preserve the field values: %v", err)
+	}
+	output := filepath.Join(t.TempDir(), "roundtrip.csv")
+	if _, err := sink([]runtime.Value{got, runtime.String(output)}); err != nil {
+		t.Fatal(err)
+	}
+	roundtrip, err := source([]runtime.Value{runtime.String(output)})
+	if err != nil || !reflect.DeepEqual(roundtrip, want) {
+		t.Fatalf("CSV round-trip changed the fields: %v", err)
+	}
+}
+
+func TestCSVSinkPreservesExistingPermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "report.csv")
+	if err := os.WriteFile(path, []byte("old\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0640); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := runtime.List{runtime.Record{"total": runtime.Number(1)}}
+	if _, err := sink([]runtime.Value{rows, runtime.String(path)}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Mode().Perm() != before.Mode().Perm() {
+		t.Fatalf("sink changed permissions from %o to %o", before.Mode().Perm(), after.Mode().Perm())
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != "total\n1\n" {
+		t.Fatalf("sink wrote %q, %v", data, err)
+	}
+}
+
+func TestTakeReleasesDiscardedStorage(t *testing.T) {
+	input := runtime.Stream{
+		Columns: []string{"value"},
+		Values:  make([]runtime.Value, 100),
+	}
+	input.Values[0] = runtime.Number(7)
+	got, err := take([]runtime.Value{input, runtime.Number(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := got.(runtime.Stream)
+	input.Values[0] = runtime.Number(9)
+	if len(stream.Values) != 1 || stream.Values[0] != runtime.Number(7) || !reflect.DeepEqual(stream.Columns, input.Columns) {
+		t.Fatalf("take returned a shared prefix or changed the columns: %v", stream.Values)
+	}
+
+	got, err = take([]runtime.Value{input, runtime.Number(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := got.(runtime.Stream)
+	if empty.Values != nil || !reflect.DeepEqual(empty.Columns, input.Columns) {
+		t.Fatalf("take(0) retained data or dropped its columns: %+v", empty)
+	}
+}
+
+func TestCSVSinkRejectsNonRegularDestinations(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.csv")
+	if err := os.WriteFile(target, []byte("original\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rows := runtime.List{runtime.Record{"x": runtime.Number(1)}}
+	check := func(t *testing.T, path string, mode os.FileMode) {
+		t.Helper()
+		_, err := sink([]runtime.Value{rows, runtime.String(path)})
+		if err == nil || !strings.Contains(err.Error(), "is not a regular file") {
+			t.Fatalf("sink(%s) error = %v", path, err)
+		}
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode().Type() != mode {
+			t.Fatalf("sink changed the destination: %v, %v", info, err)
+		}
+	}
+	t.Run("directory", func(t *testing.T) {
+		check(t, dir, os.ModeDir)
+	})
+	t.Run("symlinks", func(t *testing.T) {
+		for _, linkTarget := range []string{target, filepath.Join(dir, "missing.csv")} {
+			path := filepath.Join(t.TempDir(), "link.csv")
+			if err := os.Symlink(linkTarget, path); err != nil {
+				t.Skipf("could not create symlink: %v", err)
+			}
+			check(t, path, os.ModeSymlink)
+			got, err := os.Readlink(path)
+			if err != nil || got != linkTarget {
+				t.Fatalf("sink changed the link target: %q, %v", got, err)
+			}
+		}
+		got, err := os.ReadFile(target)
+		if err != nil || string(got) != "original\n" {
+			t.Fatalf("sink changed the target: %q, %v", got, err)
+		}
+	})
+}
+
+func TestCSVSinkQuotesFirstHeaderWithLeadingBOM(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		columns []string
+		row     runtime.Record
+	}{
+		{"one column", []string{"\ufeffname"}, runtime.Record{"\ufeffname": runtime.String("Alice")}},
+		{"multiple columns", []string{"\ufeffname", "value"}, runtime.Record{"\ufeffname": runtime.String("Alice"), "value": runtime.Number(7)}},
+		{"quotes and CRLF", []string{"\ufeffa\"b\r\nc", "value"}, runtime.Record{"\ufeffa\"b\r\nc": runtime.String("Alice"), "value": runtime.Number(7)}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "out.csv")
+			want := runtime.Stream{Columns: tt.columns, Values: []runtime.Value{tt.row}}
+			if _, err := sink([]runtime.Value{want, runtime.String(path)}); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil || !strings.HasPrefix(string(data), "\"\ufeff") {
+				t.Fatalf("first CSV field was not quoted: %q, %v", data, err)
+			}
+			got, err := source([]runtime.Value{runtime.String(path)})
+			if err != nil || !reflect.DeepEqual(got, want) {
+				t.Fatalf("CSV round-trip = %#v, %v, want %#v", got, err, want)
+			}
+		})
+	}
+}
+
+func TestCSVSourceRejectsBlankFirstLine(t *testing.T) {
+	for _, firstLine := range []string{"\n", "\r\n", "\ufeff\n", "\ufeff\r\n"} {
+		for _, rest := range []string{"", "Alice,30\nBob,40\n"} {
+			path := filepath.Join(t.TempDir(), "data.csv")
+			if err := os.WriteFile(path, []byte(firstLine+rest), 0600); err != nil {
+				t.Fatal(err)
+			}
+			value, err := source([]runtime.Value{runtime.String(path)})
+			if value != nil || err == nil || err.Error() != "source header: first line is blank" {
+				t.Errorf("first line %q, remainder %q: got %v, %v", firstLine, rest, value, err)
+			}
+		}
+	}
+}
+
+func TestCSVSourceSkipsBlankLinesAfterHeader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.csv")
+	if err := os.WriteFile(path, []byte("name\n\nAlice\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	value, err := source([]runtime.Value{runtime.String(path)})
+	want := runtime.Stream{Columns: []string{"name"}, Values: []runtime.Value{runtime.Record{"name": runtime.String("Alice")}}}
+	if err != nil || !reflect.DeepEqual(value, want) {
+		t.Fatalf("source = %v, %v, want %v", value, err, want)
 	}
 }

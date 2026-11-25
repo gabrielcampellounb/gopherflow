@@ -17,22 +17,141 @@ type Expression interface {
 }
 
 type Program struct {
+	Definitions []*Definition
 	Expressions []Expression
 }
 
 func (p *Program) String() string {
-	parts := make([]string, len(p.Expressions))
-	for i, expression := range p.Expressions {
-		parts[i] = expression.String()
+	parts := make([]string, 0, len(p.Definitions)+len(p.Expressions))
+	for _, definition := range p.Definitions {
+		parts = append(parts, definition.String())
+	}
+	for _, expression := range p.Expressions {
+		parts = append(parts, expression.String())
 	}
 	return strings.Join(parts, "; ")
 }
 
 func (p *Program) Position() token.Position {
+	if len(p.Definitions) > 0 {
+		return p.Definitions[0].Position()
+	}
 	if len(p.Expressions) == 0 {
 		return token.Position{}
 	}
 	return p.Expressions[0].Position()
+}
+
+type ListLiteral struct {
+	Elements []Expression
+	Pos      token.Position
+}
+
+func (l *ListLiteral) expressionNode() {}
+
+func (l *ListLiteral) String() string {
+	elements := make([]string, len(l.Elements))
+	for i, element := range l.Elements {
+		elements[i] = element.String()
+	}
+	return "[" + strings.Join(elements, ", ") + "]"
+}
+
+func (l *ListLiteral) Position() token.Position { return l.Pos }
+
+type RecordField struct {
+	Name  *Identifier
+	Value Expression
+}
+
+type RecordLiteral struct {
+	Fields []RecordField
+	Pos    token.Position
+}
+
+func (r *RecordLiteral) expressionNode()          {}
+func (r *RecordLiteral) Position() token.Position { return r.Pos }
+func (r *RecordLiteral) String() string {
+	fields := make([]string, len(r.Fields))
+	for i, field := range r.Fields {
+		fields[i] = field.Name.String() + ": " + field.Value.String()
+	}
+	return "{" + strings.Join(fields, ", ") + "}"
+}
+
+type FieldExpression struct {
+	Target Expression
+	Name   *Identifier
+	Pos    token.Position
+}
+
+func (f *FieldExpression) expressionNode()          {}
+func (f *FieldExpression) Position() token.Position { return f.Pos }
+func (f *FieldExpression) String() string {
+	return groupedOperand(f.Target) + "." + f.Name.String()
+}
+
+type IndexExpression struct {
+	Target Expression
+	Index  Expression
+	Pos    token.Position
+}
+
+func (i *IndexExpression) expressionNode() {}
+
+func (i *IndexExpression) String() string {
+	return groupedOperand(i.Target) + "[" + i.Index.String() + "]"
+}
+
+func (i *IndexExpression) Position() token.Position { return i.Pos }
+
+type Definition struct {
+	Name          *Identifier
+	Parameters    []*Identifier
+	Body          Expression
+	OptimizedBody Expression // Optional execution body, invisible to String.
+	Pos           token.Position
+}
+
+func (d *Definition) String() string {
+	return "def " + d.Name.String() + "(" + identifierList(d.Parameters) + ") = " + d.Body.String()
+}
+
+func (d *Definition) Position() token.Position { return d.Pos }
+
+type CallExpression struct {
+	Function  Expression
+	Arguments []Expression
+	Pos       token.Position
+}
+
+func (c *CallExpression) expressionNode() {}
+
+func (c *CallExpression) String() string {
+	args := make([]string, len(c.Arguments))
+	for i, argument := range c.Arguments {
+		args[i] = argument.String()
+	}
+	return groupedOperand(c.Function) + "(" + strings.Join(args, ", ") + ")"
+}
+
+func (c *CallExpression) Position() token.Position { return c.Pos }
+
+type FunctionLiteral struct {
+	Token         token.Token
+	Parameters    []*Identifier
+	Body          Expression
+	OptimizedBody Expression // Optional execution body, invisible to String.
+}
+
+func (f *FunctionLiteral) expressionNode() {}
+
+func (f *FunctionLiteral) String() string {
+	return "fn(" + identifierList(f.Parameters) + ") => " + f.Body.String()
+}
+
+func (f *FunctionLiteral) Position() token.Position {
+	return f.Token.Position
 }
 
 type Identifier struct {
@@ -55,6 +174,9 @@ func (l *Literal) String() string {
 	if l.Kind == token.String {
 		return quoteString(l.Value)
 	}
+	if l.Kind == token.Number && strings.HasPrefix(l.Value, "-") {
+		return "(" + l.Value + ")"
+	}
 	return l.Value
 }
 func (l *Literal) Position() token.Position { return l.Pos }
@@ -66,10 +188,7 @@ type UnaryExpression struct {
 
 func (u *UnaryExpression) expressionNode() {}
 func (u *UnaryExpression) String() string {
-	right := u.Right.String()
-	if _, ok := u.Right.(*IfExpression); ok {
-		right = "(" + right + ")"
-	}
+	right := groupedOperand(u.Right)
 	if u.Operator.Type == token.Not {
 		return "(" + u.Operator.Lexeme + " " + right + ")"
 	}
@@ -85,15 +204,13 @@ type BinaryExpression struct {
 
 func (b *BinaryExpression) expressionNode() {}
 func (b *BinaryExpression) String() string {
-	return "(" + operandString(b.Left) + " " + b.Operator.Lexeme + " " + operandString(b.Right) + ")"
+	return "(" + groupedOperand(b.Left) + " " + b.Operator.Lexeme + " " + groupedOperand(b.Right) + ")"
 }
 
-// Preserva o agrupamento de expressões let e if usadas como operandos binários.
-func operandString(expression Expression) string {
-	if _, ok := expression.(*LetExpression); ok {
-		return "(" + expression.String() + ")"
-	}
-	if _, ok := expression.(*IfExpression); ok {
+// Preserva o escopo de expressões cujo corpo se estende até o próximo delimitador.
+func groupedOperand(expression Expression) string {
+	switch expression.(type) {
+	case *LetExpression, *FunctionLiteral, *IfExpression:
 		return "(" + expression.String() + ")"
 	}
 	return expression.String()
@@ -150,4 +267,12 @@ func quoteString(value string) string {
 	}
 	out.WriteByte('"')
 	return out.String()
+}
+
+func identifierList(identifiers []*Identifier) string {
+	names := make([]string, len(identifiers))
+	for i, identifier := range identifiers {
+		names[i] = identifier.String()
+	}
+	return strings.Join(names, ", ")
 }

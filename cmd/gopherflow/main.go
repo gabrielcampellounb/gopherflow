@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
+	goruntime "runtime"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/evaluator"
 	"github.com/gabrielcampellounb/gopherflow/internal/lexer"
 	"github.com/gabrielcampellounb/gopherflow/internal/parser"
+	"github.com/gabrielcampellounb/gopherflow/internal/runtime"
 )
 
 func main() {
@@ -15,21 +18,40 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 {
-		fmt.Fprintln(stderr, "file execution is not implemented yet")
+	if len(args) > 1 {
+		fmt.Fprintln(stderr, "usage: gopherflow [file]")
 		return 2
 	}
-
-	program, err := parser.Parse(lexer.New("null"))
+	source := "null"
+	if len(args) == 1 {
+		data, err := os.ReadFile(args[0])
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		source = string(data)
+	}
+	program, err := parser.Parse(lexer.New(source))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	value, err := evaluator.Evaluate(program)
+	value, err := evaluator.EvaluateConcurrent(program, goruntime.GOMAXPROCS(0))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	fmt.Fprintln(stdout, value.Inspect())
+	output := bufio.NewWriter(stdout)
+	err = runtime.WriteValue(output, value)
+	if err == nil {
+		err = output.WriteByte('\n')
+	}
+	if err == nil {
+		err = output.Flush()
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	return 0
 }

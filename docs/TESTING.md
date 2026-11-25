@@ -9,11 +9,10 @@ make coverage
 ```
 
 `make check` verifica formatação, vet, staticcheck, testes e detector de corridas.
-Os testes de processo também verificam a saída padrão, a saída de erros e os
-códigos de saída do programa de linha de comando.
-A cobertura mede caminhos executados, não prova correção. Os caminhos de erro do
-programa que analisam a constante `null` não são artificialmente ativados por
-simulações.
+Os testes de processo verificam a saída padrão, a saída de erros e os
+códigos de saída do programa de linha de comando. Os testes do CLI executam
+arquivos reais e verificam erros de leitura, análise e avaliação. A cobertura
+mede quais partes do código foram executadas pela suíte.
 
 A suíte cobre tokens e posições, escapes existentes, limites numéricos,
 precedência e associatividade, estrutura e reconstrução da AST, aritmética,
@@ -22,11 +21,26 @@ determinística dos valores. Avaliações independentes compartilham uma AST em 
 teste paralelo; isso não implica que um Environment mutável possa ser escrito
 simultaneamente por várias goroutines.
 
-Os testes distinguem as camadas: reconhecer ou analisar um operador não implica
-que o avaliador já o execute. Operadores sem implementação devem retornar erro.
-As funções da biblioteca padrão continuam sendo marcadores explícitos, e o
-programa de linha de comando continua sem executar arquivos. A suíte não
-implementa os recursos futuros de `LANGUAGE.md`.
+Os testes de conformidade exercitam records, acesso a campos, chamadas e
+pipelines com e sem otimização, incluindo a ordem dos efeitos. Os testes de
+dataflow cobrem as operações da biblioteca padrão e um pipeline CSV completo.
+O fuzzing do avaliador usa um ambiente isolado sem bindings de acesso a arquivos.
+
+## Avaliação concorrente da AST
+
+O CLI usa `EvaluateConcurrent`, que otimiza a AST antes de agendar lotes.
+O limite de workers vem de `GOMAXPROCS`. Com `GOMAXPROCS=1`, a avaliação
+ocorre em sequência. Os pontos de entrada `Evaluate` e `EvaluateIn` também
+oferecem avaliação sequencial.
+
+Listas e records com trabalho suficiente podem distribuir seus elementos ou
+campos entre workers, desde que todos sejam expressões puras que só dependam
+de bindings internos ao próprio item. Chamadas, callbacks de dataflow e
+acessos a bindings externos seguem a ordem sequencial. Dentro de um callback,
+lotes puros podem usar o pool da avaliação em andamento. Os resultados dos
+workers são recolhidos pela posição original, inclusive quando mais de um
+item falha. Os testes verificam a execução simultânea, o limite do pool,
+a ordem dos resultados e erros e a ordem dos efeitos.
 
 ## Testes de fuzzing
 

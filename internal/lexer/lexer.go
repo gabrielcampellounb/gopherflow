@@ -2,6 +2,8 @@ package lexer
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gabrielcampellounb/gopherflow/internal/token"
 )
@@ -33,8 +35,16 @@ func (l *Lexer) Next() (token.Token, error) {
 		return token.Token{Type: token.EOF, Position: start}, nil
 	}
 
+	if l.peek() >= utf8.RuneSelf {
+		ch := l.advanceRune()
+		if ch == utf8.RuneError && l.offset-start.Offset == 1 {
+			return token.Token{}, &Error{Position: start, Message: fmt.Sprintf("invalid UTF-8 byte 0x%02x", l.source[start.Offset])}
+		}
+		return token.Token{}, &Error{Position: start, Message: fmt.Sprintf("unexpected character %q", ch)}
+	}
+
 	ch := l.advance()
-	if isLetter(ch) || ch == '_' {
+	if token.IsIdentifierStart(ch) {
 		lexeme := l.readIdentifier()
 		return token.Token{Type: token.LookupIdentifier(lexeme), Lexeme: lexeme, Position: start}, nil
 	}
@@ -118,9 +128,7 @@ func (l *Lexer) Next() (token.Token, error) {
 func (l *Lexer) skipWhitespace() {
 	for !l.atEnd() {
 		switch l.source[l.offset] {
-		case ' ', '\t', '\r':
-			l.advance()
-		case '\n':
+		case ' ', '\t', '\r', '\n':
 			l.advance()
 		default:
 			return
@@ -132,7 +140,7 @@ func (l *Lexer) readIdentifier() string {
 	start := l.offset - 1
 	for !l.atEnd() {
 		ch := l.source[l.offset]
-		if !isLetter(ch) && !isDigit(ch) && ch != '_' {
+		if !token.IsIdentifierContinue(ch) {
 			break
 		}
 		l.advance()
@@ -154,45 +162,50 @@ func (l *Lexer) readNumber() string {
 	return l.source[start:l.offset]
 }
 
-func isLetter(ch byte) bool {
-	return ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'
-}
-
 func isDigit(ch byte) bool {
 	return ch >= '0' && ch <= '9'
 }
 
 func (l *Lexer) readString(start token.Position) (string, error) {
-	var value []byte
+	var value strings.Builder
+	chunkStart := l.offset
 	for !l.atEnd() {
-		ch := l.advance()
-		if ch == '"' {
-			return string(value), nil
+		if l.peek() >= utf8.RuneSelf {
+			l.advanceRune()
+			continue
 		}
-		if ch == '\\' {
-			if l.atEnd() {
-				break
+		ch := l.advance()
+		switch ch {
+		case '"':
+			chunk := l.source[chunkStart : l.offset-1]
+			if value.Len() == 0 {
+				return chunk, nil
 			}
+			value.WriteString(chunk)
+			return value.String(), nil
+		case '\\':
+			if l.atEnd() {
+				return "", &Error{Position: start, Message: "unterminated string"}
+			}
+			value.WriteString(l.source[chunkStart : l.offset-1])
 			escapePosition := l.position()
-			escaped := l.advance()
+			escaped := l.advanceRune()
 			switch escaped {
 			case '"', '\\':
-				value = append(value, escaped)
+				value.WriteByte(byte(escaped))
 			case 'n':
-				value = append(value, '\n')
+				value.WriteByte('\n')
 			case 'r':
-				value = append(value, '\r')
+				value.WriteByte('\r')
 			case 't':
-				value = append(value, '\t')
+				value.WriteByte('\t')
 			default:
 				return "", &Error{Position: escapePosition, Message: fmt.Sprintf("invalid escape \\%c", escaped)}
 			}
-			continue
-		}
-		if ch == '\n' {
+			chunkStart = l.offset
+		case '\r', '\n':
 			return "", &Error{Position: start, Message: "unterminated string"}
 		}
-		value = append(value, ch)
 	}
 	return "", &Error{Position: start, Message: "unterminated string"}
 }
@@ -204,10 +217,28 @@ func (l *Lexer) position() token.Position {
 func (l *Lexer) advance() byte {
 	ch := l.source[l.offset]
 	l.offset++
-	if ch == '\n' {
+	switch ch {
+	case '\r':
 		l.line++
 		l.column = 1
+	case '\n':
+		if l.offset == 1 || l.source[l.offset-2] != '\r' {
+			l.line++
+		}
+		l.column = 1
+	default:
+		l.column++
+	}
+	return ch
+}
+
+// advanceRune is called at a character boundary after checking for EOF.
+func (l *Lexer) advanceRune() rune {
+	ch, size := utf8.DecodeRuneInString(l.source[l.offset:])
+	if size == 1 {
+		l.advance()
 	} else {
+		l.offset += size
 		l.column++
 	}
 	return ch

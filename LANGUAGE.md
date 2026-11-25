@@ -201,6 +201,11 @@ digit =
   | "5" | "6" | "7" | "8" | "9" ;
 ```
 
+Dentro de strings, aspas e barras invertidas devem ser escapadas. Os escapes
+reconhecidos são `\"`, `\\`, `\n`, `\r` e `\t`. LF, CRLF e CR isolado contam como quebra de linha. Uma quebra de linha
+literal dentro de uma string encerra a leitura com erro. As colunas dos
+diagnósticos contam pontos de código Unicode, e os offsets contam bytes.
+
 ### Palavras reservadas
 
 ```text
@@ -249,7 +254,17 @@ equivale a:
 g(f(x))
 ```
 
+Quando o operando direito é uma chamada, o valor à esquerda entra como
+primeiro argumento. `x |> f(a, b)` equivale a `f(x, a, b)`.
+
 ---
+
+## Limites do analisador
+
+O analisador aceita até 4.096 níveis de aninhamento da sintaxe e árvores de
+expressão com até 1.024 nós por caminho da raiz a uma folha. Cadeias longas
+de operadores ou sufixos também contam para a profundidade da árvore. O
+limite de profundidade permite listas e records largos.
 
 ## Semântica básica
 
@@ -271,6 +286,14 @@ Exemplo:
 ```
 
 deve produzir um erro de tipo.
+
+### Igualdade de coleções
+
+Listas comparam seus elementos na ordem. Records comparam as chaves e os
+respectivos valores, independentemente da ordem dos campos. Streams comparam
+a ordem das colunas, quando presente, e os elementos na ordem. As comparações
+aplicam as mesmas regras aos valores aninhados. Por exemplo, `[0] == [-0]`
+retorna `true`.
 
 ### Imutabilidade
 
@@ -297,7 +320,13 @@ Definições nomeadas:
 def square(x) = x * x;
 ```
 
-Definições de topo podem ser recursivas.
+Definições de topo podem ser recursivas. O interpretador aceita até 1024
+chamadas de função ativas, incluindo callbacks de dataflow. A próxima
+chamada produz um erro de execução.
+
+A igualdade entre funções compara a identidade do valor. Uma função
+comparada com uma referência à mesma função é igual a si própria. Duas
+closures criadas em avaliações distintas têm identidades distintas.
 
 ### Registros
 
@@ -313,6 +342,19 @@ Acesso:
 ```gopherflow
 record.temperature
 ```
+
+Chaves também podem ser acessadas por uma expressão `String`. Isso permite
+consultar nomes de colunas CSV e chaves de `keyBy` que não são identificadores.
+
+```gopherflow
+record["air temperature"]
+```
+
+Na saída do CLI, os nomes de campos que não são identificadores válidos
+aparecem entre aspas, com escapes quando necessário.
+
+Os campos são avaliados na ordem em que aparecem. Nomes repetidos são erros
+de sintaxe, e o acesso a um campo ausente produz um erro em tempo de execução.
 
 ### Listas
 
@@ -330,22 +372,44 @@ xs[0]
 
 ## Biblioteca padrão para fluxo de dados
 
-A biblioteca padrão deverá fornecer, inicialmente:
+Os nomes das operações de fluxo são vínculos comuns do ambiente padrão. As
+operações aceitam `List` ou `Stream` e percorrem os elementos na ordem de
+entrada. Nesta implementação, os streams são materializados em memória e as
+operações executam de forma síncrona.
 
-```text
-source
-map
-filter
-flatMap
-take
-keyBy
-reduce
-forEach
-sink
-```
+| Operação | Resultado |
+|---|---|
+| `source(path)` | Stream de records lidos de um CSV local. |
+| `map(data, f)` | Stream com o resultado de `f(item)` para cada item. |
+| `filter(data, f)` | Stream com os itens para os quais `f(item)` retorna `true`. O retorno deve ser `Bool`. |
+| `flatMap(data, f)` | Stream com os elementos das listas ou streams retornados por `f(item)`, concatenados em ordem. |
+| `take(data, n)` | Stream com até os primeiros `n` itens. `n` deve ser um inteiro não negativo. |
+| `keyBy(data, f)` | Record que associa cada chave `String` retornada por `f(item)` ao stream de itens dessa chave. |
+| `reduce(data, initial, f)` | Resultado de aplicar `f(acumulador, item)` sucessivamente. Em uma entrada vazia, retorna `initial`. |
+| `forEach(data, f)` | Executa `f(item)` pela ordem de entrada e retorna `null`. |
+| `sink(data, path)` | Grava os records em um CSV local e retorna `null`. |
 
-Esses nomes são vínculos comuns do ambiente padrão, não construções especiais do
-analisador sintático.
+`source` aceita arquivos UTF-8 com ou sem BOM. Usa a primeira linha como
+cabeçalho e exige nomes de coluna únicos e não vazios. Uma primeira linha
+vazia é rejeitada. Um arquivo sem conteúdo produz um stream vazio. Valores
+decimais finitos são lidos como `Number`. As demais células são lidas como
+`String`, inclusive células vazias. Quebras de linha
+dentro de campos entre aspas são preservadas.
+
+`sink` exige que todas as linhas tenham os mesmos campos e que seus valores
+sejam `String`, `Number`, `Bool` ou `Null`. Valores `Null` viram células vazias.
+A ordem de colunas do CSV de origem é preservada por `filter`, `take` e
+`keyBy`. Para records sem cabeçalho de origem, `sink` ordena as colunas pelo
+nome. Um stream vazio com cabeçalho grava somente o cabeçalho. A gravação
+substitui o destino após a geração bem-sucedida do CSV. Ao atualizar um
+arquivo regular existente, preserva os bits de permissão. No Linux, também
+preserva o proprietário, o grupo e a ACL POSIX de acesso, quando presente.
+Se a preservação falhar, o arquivo original permanece intacto. Links
+simbólicos e outros destinos existentes que não sejam arquivos regulares
+são rejeitados.
+
+Erros de callbacks interrompem a operação e indicam a posição do item na
+entrada, começando em 1.
 
 ---
 
